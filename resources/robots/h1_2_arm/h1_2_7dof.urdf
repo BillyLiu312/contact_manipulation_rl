@@ -564,6 +564,24 @@
     <limit lower="-1.27" upper="1.27" effort="19" velocity="31.4"/>
   </joint>
 
+  <!-- L ee operator -->
+  <link name="ee_op">
+    <inertial>
+      <mass value="0.001"/>
+      <origin xyz="0 0 0"/>
+      <inertia ixx="1e-6" ixy="0" ixz="0" iyy="1e-6" iyz="0" izz="1e-6"/>
+    </inertial>
+    <!-- 可选：添加 collision/visual 几何体，用于接触 -->
+    <collision>
+      <geometry><sphere radius="0.01"/></geometry>
+    </collision>
+  </link>
+  <joint name="left_wrist_to_ee_op" type="fixed">
+    <parent link="left_wrist_yaw_link"/>
+    <child link="ee_op"/>
+    <origin xyz="0.05 0 0" rpy="0 0 0"/>
+  </joint>
+
   <!-- R arm -->
   <link name="right_shoulder_pitch_link">
     <inertial>
@@ -758,7 +776,7 @@
   </joint>
 
   <!-- L Gripper -->
-  <joint name="L_base_link_joint" type="fixed">
+  <!-- <joint name="L_base_link_joint" type="fixed">
     <origin xyz="0.054 0 0" rpy="0 0 1.5707963267948966192313216916398"/>
     <parent link="left_wrist_yaw_link"/>
     <child link="L_hand_base_link"/>
@@ -1060,7 +1078,7 @@
     <axis xyz="0 0 -1"/>
     <limit lower="0" upper="1.7" effort="1" velocity="0.5"/>
     <mimic joint="L_pinky_proximal_joint" multiplier="1" offset="0"/>
-  </joint>
+  </joint> -->
 
   <!-- R Gripper -->
   <joint name="R_base_link_joint" type="fixed">
