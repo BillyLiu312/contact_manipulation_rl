@@ -26,11 +26,17 @@ class H1_2ArmRoughCfg(LeggedRobotCfg):
             'left_shoulder_roll_joint': 0,
             'left_shoulder_yaw_joint': 0,
             'left_elbow_pitch_joint': 0.3,
+            'left_elbow_roll_joint': 0.0,
+            'left_wrist_pitch_joint': 0.0,
+            'left_wrist_yaw_joint': 0.0,
 
             'right_shoulder_pitch_joint': 0.4,
             'right_shoulder_roll_joint': 0,
             'right_shoulder_yaw_joint': 0,
             'right_elbow_pitch_joint': 0.3,
+            'right_elbow_roll_joint': 0.0,
+            'right_wrist_pitch_joint': 0.0,
+            'right_wrist_yaw_joint': 0.0,
         }
 
     class env(LeggedRobotCfg.env):
@@ -45,22 +51,22 @@ class H1_2ArmRoughCfg(LeggedRobotCfg):
         control_type = 'P'
         # PD Drive parameters:
         stiffness = {
-            'shoulder_pitch_joint': 100.,
-            'shoulder_roll_joint': 100.,
-            'shoulder_yaw_joint': 100.,
-            'elbow_pitch_joint': 100.,
-            'elbow_roll_joint': 100.,
-            'wrist_pitch_joint': 100.,
-            'wrist_yaw_joint': 100.,
+            'shoulder_pitch_joint': 120.,
+            'shoulder_roll_joint': 120.,
+            'shoulder_yaw_joint': 120.,
+            'elbow_pitch_joint': 80.,
+            'elbow_roll_joint': 80.,
+            'wrist_pitch_joint': 80.,
+            'wrist_yaw_joint': 80.,
         }  # [N*m/rad]
         damping = {
             'shoulder_pitch_joint': 2.0,
             'shoulder_roll_joint': 2.0,
             'shoulder_yaw_joint': 2.0,  
-            'elbow_pitch_joint': 2.0,
-            'elbow_roll_joint': 2.0,
-            'wrist_pitch_joint': 2.0,
-            'wrist_yaw_joint': 2.0,
+            'elbow_pitch_joint': 1.0,
+            'elbow_roll_joint': 1.0,
+            'wrist_pitch_joint': 1.0,
+            'wrist_yaw_joint': 1.0,
         }  # [N*m/rad]  # [N*m*s/rad]
         # action scale: target angle = actionScale * action + defaultAngle
         action_scale = 0.25
@@ -91,8 +97,8 @@ class H1_2ArmRoughCfg(LeggedRobotCfg):
         file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/h1_2_arm/h1_2_7dof.urdf'
         name = "h1_2_arm"
         foot_name = "ankle_roll"
-        penalize_contacts_on = ["hip", "knee"]
-        terminate_after_contacts_on = ["pelvis"]
+        penalize_contacts_on = []
+        terminate_after_contacts_on = []
         self_collisions = 0  # 1 to disable, 0 to enable...bitwise filter
         flip_visual_attachments = False
         armature = 1e-3

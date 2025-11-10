@@ -8,71 +8,6 @@ from .h1_2_arm_config import H1_2ArmRoughCfg
 from legged_gym.utils.se3_math import *
 
 class H1_2ArmRobot(LeggedRobot):
-    def __init__(self, cfg: H1_2ArmRoughCfg, sim_params, physics_engine, sim_device, headless):
-        """ Parses the provided config file,
-            calls create_sim() (which creates, simulation and environments),
-            initilizes pytorch buffers used during training
-
-        Args:
-            cfg (Dict): Environment config file
-            sim_params (gymapi.SimParams): simulation parameters
-            physics_engine (gymapi.SimType): gymapi.SIM_PHYSX (must be PhysX)
-            device_type (string): 'cuda' or 'cpu'
-            device_id (int): 0, 1, ...
-            headless (bool): Run without rendering if True
-        """
-        super().__init__(cfg, sim_params, physics_engine, sim_device, headless)
-        self._create_hand_drivers()                                                          # create hand drivers after sim creation
-
-    def _create_hand_drivers(self):
-        """Create driver rigid bodies for left/right hands"""
-        asset_options = gymapi.AssetOptions()
-        asset_options.disable_gravity = True
-        asset_options.collapse_fixed_joints = True
-        self.driver_asset = self.gym.create_sphere(self.sim, 0.01, asset_options)
-
-        self.left_driver_handles = []
-        # self.right_driver_handles = []
-        self.left_driver_rb_handles = []
-        # self.right_driver_rb_handles = []
-
-        for i in range(self.num_envs):
-            # Left driver
-            l_handle = self.gym.create_actor(
-                self.envs[i], self.driver_asset, gymapi.Transform(), "left_driver", i, 0
-            )
-            l_rb_handle = self.gym.get_actor_rigid_body_handle(self.envs[i], l_handle, 0)
-            self.left_driver_handles.append(l_handle)
-            self.left_driver_rb_handles.append(l_rb_handle)
-
-            # Right driver
-            # r_handle = self.gym.create_actor(
-            #     self.envs[i], self.driver_asset, gymapi.Transform(), "right_driver", i, 0
-            # )
-            # r_rb_handle = self.gym.get_actor_rigid_body_handle(self.envs[i], r_handle, 0)
-            # self.right_driver_handles.append(r_handle)
-            # self.right_driver_rb_handles.append(r_rb_handle)
-
-        # Create fixed joints between ee_op and drivers
-        for i in range(self.num_envs):
-            # Left
-            left_ee_handle = self.gym.find_actor_rigid_body_handle(
-                self.envs[i], self.actor_handles[i], "left_ee_op"
-            )
-            self.gym.create_fixed_joint(
-                self.envs[i], left_ee_handle, self.left_driver_rb_handles[i], gymapi.Transform()
-            )
-            # Right
-            # right_ee_handle = self.gym.find_actor_rigid_body_handle(
-            #     self.envs[i], self.actor_handles[i], "right_ee_op"
-            # )
-            # self.gym.create_fixed_joint(
-            #     self.envs[i], right_ee_handle, self.right_driver_rb_handles[i], gymapi.Transform()
-            # )
-
-        # Store indices for contact force access
-        self.left_driver_indices = torch.tensor(self.left_driver_rb_handles, dtype=torch.long, device=self.device)
-        self.right_driver_indices = torch.tensor(self.right_driver_rb_handles, dtype=torch.long, device=self.device)
 
     def _get_noise_scale_vec(self, cfg):
         """ Sets a vector used to scale the noise added to the observations.
@@ -109,15 +44,23 @@ class H1_2ArmRobot(LeggedRobot):
     def _init_buffers(self):
         super()._init_buffers()
         self._init_foot()
+        
+        self.left_driver_rb_index = self.gym.find_actor_rigid_body_handle(self.envs[0], self.actor_handles[0], "left_ee_op")
 
+        # Create global indices tensor for contact force access
+        # All envs have same topology, so offset by env_id * num_bodies
+        self.num_bodies = self.gym.get_actor_rigid_body_count(self.envs[0], self.actor_handles[0])
+        self.left_driver_indices = torch.tensor(
+            [self.left_driver_rb_index + i * self.num_bodies for i in range(self.num_envs)],
+            device=self.device, dtype=torch.long
+        )
         # Buffers for twist constraint
         self.twist_left = torch.zeros(self.num_envs, 6, device=self.device)
         # self.twist_right = torch.zeros(self.num_envs, 6, device=self.device)
         self.T0_left = torch.zeros(self.num_envs, 4, 4, device=self.device)
         # self.T0_right = torch.zeros(self.num_envs, 4, 4, device=self.device)
 
-        # Contact force buffer
-        self.contact_forces = gymtorch.wrap_tensor(self.gym.acquire_net_contact_force_tensor(self.sim))
+        self.rb_states = gymtorch.wrap_tensor(self.gym.acquire_rigid_body_state_tensor(self.sim)).view(self.num_envs, self.num_bodies, 13)  # (env, body, state)
 
     def random_unit_twist(self):
         """Generate a random unit twist in se(3)"""
@@ -147,48 +90,40 @@ class H1_2ArmRobot(LeggedRobot):
             # self.twist_right[i] = self.random_unit_twist()
 
         # Record initial poses
-        rb_states = gymtorch.wrap_tensor(self.gym.acquire_rigid_body_state_tensor(self.sim))
+        self.rb_states = gymtorch.wrap_tensor(self.gym.acquire_rigid_body_state_tensor(self.sim)).view(self.num_envs, self.num_bodies, 13)
         for i in env_ids:
             # Left
-            pos_l = rb_states[self.left_driver_rb_handles[i], :3].clone()
-            quat_l = rb_states[self.left_driver_rb_handles[i], 3:7].clone()
+            pos_l = self.rb_states[i, self.left_driver_rb_index, :3]
+            quat_l = self.rb_states[i, self.left_driver_rb_index, 3:7]
             self.T0_left[i] = pose_to_se3(pos_l, quat_l)
             # Right
-            # pos_r = rb_states[self.right_driver_rb_handles[i], :3].clone()
-            # quat_r = rb_states[self.right_driver_rb_handles[i], 3:7].clone()
+            # pos_r = self.rb_states[self.right_driver_rb_handles[i], :3].clone()
+            # quat_r = self.rb_states[self.right_driver_rb_handles[i], 3:7].clone()
             # self.T0_right[i] = pose_to_se3(pos_r, quat_r)
 
     def _project_hand_poses(self):
         """Project driver poses onto 1D SE(3) manifold defined by twist"""
-        rb_states = gymtorch.wrap_tensor(self.gym.acquire_rigid_body_state_tensor(self.sim))
         for i in range(self.num_envs):
             # --- Left hand ---
-            pos_curr = rb_states[self.left_driver_rb_handles[i], :3]
-            quat_curr = rb_states[self.left_driver_rb_handles[i], 3:7]
+            pos_curr = self.rb_states[i, self.left_driver_rb_index, :3]
+            quat_curr = self.rb_states[i, self.left_driver_rb_index, 3:7]
             T_curr = pose_to_se3(pos_curr, quat_curr)
             T_rel = torch.inverse(self.T0_left[i]) @ T_curr
             delta_twist = se3_log_map(T_rel)
             s = torch.dot(delta_twist, self.twist_left[i])
             T_proj = self.T0_left[i] @ se3_exp_map(self.twist_left[i], s)
             pos_proj, quat_proj = se3_to_pose(T_proj)
+            
             self.gym.set_rigid_transform(
-                self.envs[i], self.left_driver_rb_handles[i],
-                gymapi.Transform(gymapi.Vec3(*pos_proj), gymapi.Quat(*quat_proj[[3,0,1,2]]))
+                self.envs[i],
+                self.gym.find_actor_rigid_body_handle(
+                    self.envs[i], self.actor_handles[i], "left_ee_op"
+                ),
+                gymapi.Transform(
+                    gymapi.Vec3(*pos_proj),
+                    gymapi.Quat(*quat_proj[[3, 0, 1, 2]])  # wxyz → Quat(w,x,y,z)
+                )
             )
-
-            # --- Right hand ---
-            # pos_curr = rb_states[self.right_driver_rb_handles[i], :3]
-            # quat_curr = rb_states[self.right_driver_rb_handles[i], 3:7]
-            # T_curr = pose_to_se3(pos_curr, quat_curr)
-            # T_rel = torch.inverse(self.T0_right[i]) @ T_curr
-            # delta_twist = se3_log_map(T_rel)
-            # s = torch.dot(delta_twist, self.twist_right[i])
-            # T_proj = self.T0_right[i] @ se3_exp_map(self.twist_right[i], s)
-            # pos_proj, quat_proj = se3_to_pose(T_proj)
-            # self.gym.set_rigid_transform(
-            #     self.envs[i], self.right_driver_rb_handles[i],
-            #     gymapi.Transform(gymapi.Vec3(*pos_proj), gymapi.Quat(*quat_proj[[3,0,1,2]]))
-            # )
 
     def update_feet_state(self):
         self.gym.refresh_rigid_body_state_tensor(self.sim)
