@@ -34,10 +34,10 @@ class H1_2ArmRoughCfg(LeggedRobotCfg):
         }
 
     class env(LeggedRobotCfg.env):
-        # 3 + 3 + 3 + 12 + 12 + 12 + 2 = 47
-        num_observations = 47
-        num_privileged_obs = 50
-        num_actions = 12
+        # 3 + 7 + 7 + 7 + 3 = 27
+        num_observations = 27
+        num_privileged_obs = 27
+        num_actions = 7
       
 
     class control(LeggedRobotCfg.control):
@@ -45,25 +45,35 @@ class H1_2ArmRoughCfg(LeggedRobotCfg):
         control_type = 'P'
         # PD Drive parameters:
         stiffness = {
-            'hip_yaw_joint': 200.,
-            'hip_roll_joint': 200.,
-            'hip_pitch_joint': 200.,
-            'knee_joint': 300.,
-            'ankle_pitch_joint': 40.,
-            'ankle_roll_joint': 40.,
+            'shoulder_pitch_joint': 100.,
+            'shoulder_roll_joint': 100.,
+            'shoulder_yaw_joint': 100.,
+            'elbow_pitch_joint': 100.,
+            'elbow_roll_joint': 100.,
+            'wrist_pitch_joint': 100.,
+            'wrist_yaw_joint': 100.,
         }  # [N*m/rad]
         damping = {
-            'hip_yaw_joint': 2.5,
-            'hip_roll_joint': 2.5,
-            'hip_pitch_joint': 2.5,
-            'knee_joint': 4,
-            'ankle_pitch_joint': 2.0,
-            'ankle_roll_joint': 2.0,
+            'shoulder_pitch_joint': 2.0,
+            'shoulder_roll_joint': 2.0,
+            'shoulder_yaw_joint': 2.0,  
+            'elbow_pitch_joint': 2.0,
+            'elbow_roll_joint': 2.0,
+            'wrist_pitch_joint': 2.0,
+            'wrist_yaw_joint': 2.0,
         }  # [N*m/rad]  # [N*m*s/rad]
         # action scale: target angle = actionScale * action + defaultAngle
         action_scale = 0.25
         # decimation: Number of control action updates @ sim DT per policy DT
         decimation = 8
+
+    class noise(LeggedRobotCfg.noise):
+        class noise_scales(LeggedRobotCfg.noise.noise_scales):
+            contact = 0.1
+
+    class normalization(LeggedRobotCfg.normalization):
+        class obs_scales(LeggedRobotCfg.normalization.obs_scales):
+            contact = 10.0
 
     class sim(LeggedRobotCfg.sim):
         dt =  0.0025
