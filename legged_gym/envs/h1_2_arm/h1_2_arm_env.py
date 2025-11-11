@@ -185,7 +185,6 @@ class H1_2ArmRobot(LeggedRobot):
         """
         # Get contact forces on drivers
         left_cf = self.contact_forces[self.left_driver_indices, :3]  # (N, 3)
-        right_cf = self.contact_forces[self.right_driver_indices, :3]  # (N, 3)
 
         self.obs_buf = torch.cat((  
                                     self.projected_gravity, # 3

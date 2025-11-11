@@ -416,7 +416,7 @@
       </material>
     </visual>
   </link>
-  <joint name="left_shoulder_pitch_joint" type="fixed">
+  <joint name="left_shoulder_pitch_joint" type="revolute">
     <origin xyz="0 0.14806 0.42333" rpy="0.2618 0 0"/>
     <parent link="torso_link"/>
     <child link="left_shoulder_pitch_link"/>
@@ -439,7 +439,7 @@
       </material>
     </visual>
   </link>
-  <joint name="left_shoulder_roll_joint" type="fixed">
+  <joint name="left_shoulder_roll_joint" type="revolute">
     <origin xyz="0.0342 0.061999 -0.0060011" rpy="-0.2618 0 0"/>
     <parent link="left_shoulder_pitch_link"/>
     <child link="left_shoulder_roll_link"/>
@@ -462,7 +462,7 @@
       </material>
     </visual>
   </link>
-  <joint name="left_shoulder_yaw_joint" type="fixed">
+  <joint name="left_shoulder_yaw_joint" type="revolute">
     <origin xyz="-0.0342 0 -0.1456" rpy="0 0 0"/>
     <parent link="left_shoulder_roll_link"/>
     <child link="left_shoulder_yaw_link"/>
@@ -485,7 +485,7 @@
       </material>
     </visual>
   </link>
-  <joint name="left_elbow_pitch_joint" type="fixed">
+  <joint name="left_elbow_pitch_joint" type="revolute">
     <origin xyz="0.006 0.0329 -0.182" rpy="0 0 0"/>
     <parent link="left_shoulder_yaw_link"/>
     <child link="left_elbow_pitch_link"/>
@@ -509,7 +509,7 @@
       </material>
     </visual>
   </link>
-  <joint name="left_elbow_roll_joint" type="fixed">
+  <joint name="left_elbow_roll_joint" type="revolute">
     <origin xyz="0.121 -0.0329 -0.011" rpy="0 0 0"/>
     <parent link="left_elbow_pitch_link"/>
     <child link="left_elbow_roll_link"/>
@@ -533,7 +533,7 @@
       </material>
     </visual>
   </link>
-  <joint name="left_wrist_pitch_joint" type="fixed">
+  <joint name="left_wrist_pitch_joint" type="revolute">
     <origin xyz="0.085 0 0" rpy="0 0 0"/>
     <parent link="left_elbow_roll_link"/>
     <child link="left_wrist_pitch_link"/>
@@ -556,7 +556,7 @@
       </material>
     </visual>
   </link>
-  <joint name="left_wrist_yaw_joint" type="fixed">
+  <joint name="left_wrist_yaw_joint" type="revolute">
     <origin xyz="0.020 0 0" rpy="0 0 0"/>
     <parent link="left_wrist_pitch_link"/>
     <child link="left_wrist_yaw_link"/>
@@ -599,7 +599,7 @@
       </material>
     </visual>
   </link>
-  <joint name="right_shoulder_pitch_joint" type="revolute">
+  <joint name="right_shoulder_pitch_joint" type="fixed">
     <origin xyz="0 -0.14806 0.42333" rpy="-0.2618 0 0"/>
     <parent link="torso_link"/>
     <child link="right_shoulder_pitch_link"/>
@@ -622,7 +622,7 @@
       </material>
     </visual>
   </link>
-  <joint name="right_shoulder_roll_joint" type="revolute">
+  <joint name="right_shoulder_roll_joint" type="fixed">
     <origin xyz="0.0342 -0.061999 -0.0060011" rpy="0.2618 0 0"/>
     <parent link="right_shoulder_pitch_link"/>
     <child link="right_shoulder_roll_link"/>
@@ -646,7 +646,7 @@
       </material>
     </visual>
   </link>
-  <joint name="right_shoulder_yaw_joint" type="revolute">
+  <joint name="right_shoulder_yaw_joint" type="fixed">
     <origin xyz="-0.0342 0 -0.1456" rpy="0 0 0"/>
     <parent link="right_shoulder_roll_link"/>
     <child link="right_shoulder_yaw_link"/>
@@ -669,7 +669,7 @@
       </material>
     </visual>
   </link>
-  <joint name="right_elbow_pitch_joint" type="revolute">
+  <joint name="right_elbow_pitch_joint" type="fixed">
     <origin xyz="0.006 -0.0329 -0.182" rpy="0 0 0"/>
     <parent link="right_shoulder_yaw_link"/>
     <child link="right_elbow_pitch_link"/>
@@ -693,7 +693,7 @@
       </material>
     </visual>
   </link>
-  <joint name="right_elbow_roll_joint" type="revolute">
+  <joint name="right_elbow_roll_joint" type="fixed">
     <origin xyz="0.121 0.0329 -0.011" rpy="0 0 0"/>
     <parent link="right_elbow_pitch_link"/>
     <child link="right_elbow_roll_link"/>
@@ -717,7 +717,7 @@
       </material>
     </visual>
   </link>
-  <joint name="right_wrist_pitch_joint" type="revolute">
+  <joint name="right_wrist_pitch_joint" type="fixed">
     <origin xyz="0.085 0 0" rpy="0 0 0"/>
     <parent link="right_elbow_roll_link"/>
     <child link="right_wrist_pitch_link"/>
@@ -740,7 +740,7 @@
       </material>
     </visual>
   </link>
-  <joint name="right_wrist_yaw_joint" type="revolute">
+  <joint name="right_wrist_yaw_joint" type="fixed">
     <origin xyz="0.020 0 0" rpy="0 0 0"/>
     <parent link="right_wrist_pitch_link"/>
     <child link="right_wrist_yaw_link"/>
