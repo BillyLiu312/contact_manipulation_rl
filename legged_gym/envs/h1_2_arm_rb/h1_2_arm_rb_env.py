@@ -4,7 +4,7 @@ from legged_gym.envs.base.legged_robot import LeggedRobot
 from isaacgym.torch_utils import *
 from isaacgym import gymtorch, gymapi, gymutil
 import torch
-from .h1_2_arm_config import H1_2ArmRbRoughCfg
+from .h1_2_arm_rb_config import H1_2ArmRbRoughCfg
 from legged_gym.utils.se3_math import *
 
 class H1_2ArmRbRobot(LeggedRobot):
@@ -33,13 +33,13 @@ class H1_2ArmRbRobot(LeggedRobot):
         
     def _init_buffers(self):
         super()._init_buffers()       
-        self.left_driver_rb_index = self.gym.find_actor_rigid_body_handle(self.envs[0], self.actor_handles[0], "left_ee_op")
+        self.left_ee_handle = self.gym.find_actor_rigid_body_handle(self.envs[0], self.actor_handles[0], "left_ee_op")
         self.num_bodies = self.gym.get_actor_rigid_body_count(self.envs[0], self.actor_handles[0])
-        # Buffers for twist constraint
+
         self.twist_left = torch.zeros(self.num_envs, 6, device=self.device)
-        # self.twist_right = torch.zeros(self.num_envs, 6, device=self.device)
         self.T0_left = torch.zeros(self.num_envs, 4, 4, device=self.device)
-        # self.T0_right = torch.zeros(self.num_envs, 4, 4, device=self.device)
+        self.left_cf = self.contact_forces[:, self.left_ee_handle, :3]  # (N, 3)
+        self.last_left_cf = torch.zeros_like(self.left_cf)
 
         self.rb_states = gymtorch.wrap_tensor(self.gym.acquire_rigid_body_state_tensor(self.sim)).view(self.num_envs, self.num_bodies, 13)  # (env, body, state)
 
@@ -74,8 +74,8 @@ class H1_2ArmRbRobot(LeggedRobot):
         self.rb_states = gymtorch.wrap_tensor(self.gym.acquire_rigid_body_state_tensor(self.sim)).view(self.num_envs, self.num_bodies, 13)
         for i in env_ids:
             # Left
-            pos_l = self.rb_states[i, self.left_driver_rb_index, :3]
-            quat_l = self.rb_states[i, self.left_driver_rb_index, 3:7]
+            pos_l = self.rb_states[i, self.left_ee_handle, :3]
+            quat_l = self.rb_states[i, self.left_ee_handle, 3:7]
             self.T0_left[i] = pose_to_se3(pos_l, quat_l)
             # Right
             # pos_r = self.rb_states[self.right_driver_rb_handles[i], :3].clone()
@@ -86,8 +86,8 @@ class H1_2ArmRbRobot(LeggedRobot):
         """Project driver poses onto 1D SE(3) manifold defined by twist"""
         for i in range(self.num_envs):
             # --- Left hand ---
-            pos_curr = self.rb_states[i, self.left_driver_rb_index, :3]
-            quat_curr = self.rb_states[i, self.left_driver_rb_index, 3:7]
+            pos_curr = self.rb_states[i, self.left_ee_handle, :3]
+            quat_curr = self.rb_states[i, self.left_ee_handle, 3:7]
             T_curr = pose_to_se3(pos_curr, quat_curr)
             T_rel = torch.inverse(self.T0_left[i]) @ T_curr
             delta_twist = se3_log_map(T_rel)
@@ -142,25 +142,30 @@ class H1_2ArmRbRobot(LeggedRobot):
             self.privileged_obs_buf = torch.clip(self.privileged_obs_buf, -clip_obs, clip_obs)
         return self.obs_buf, self.privileged_obs_buf, self.rew_buf, self.reset_buf, self.extras
 
+    def post_physics_step(self):
+        """ check terminations, compute observations and rewards
+            calls self._post_physics_step_callback() for common computations 
+            calls self._draw_debug_vis() if needed
+        """
+        super().post_physics_step()
+        self.last_left_cf[:] = self.left_cf[:]
+    
     def compute_observations(self):
         """ Computes observations
         """
-        # Get contact forces on drivers
-        left_cf = self.contact_forces[:, self.left_driver_rb_index, :3]  # (N, 3)
-
         self.obs_buf = torch.cat((  
                                     self.projected_gravity, # 3
                                     (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos, # 7
                                     self.dof_vel * self.obs_scales.dof_vel, # 7
                                     self.actions, # 7
-                                    left_cf # 3
+                                    self.left_cf # 3
                                     ),dim=-1)
         self.privileged_obs_buf = torch.cat((
                                     self.projected_gravity,
                                     (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
                                     self.dof_vel * self.obs_scales.dof_vel,
                                     self.actions,
-                                    left_cf
+                                    self.left_cf
                                     ),dim=-1)
         # add perceptive inputs if not blind
         # add noise if needed
@@ -169,30 +174,25 @@ class H1_2ArmRbRobot(LeggedRobot):
 
 
     #------------ reward functions----------------
-    def _reward_contact(self):
-        res = torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
-        for i in range(self.feet_num):
-            is_stance = self.leg_phase[:, i] < 0.55
-            contact = self.contact_forces[:, self.feet_indices[i], 2] > 1
-            res += ~(contact ^ is_stance)
-        return res
+    def _reward_contact_force_mag(self):
+        # 鼓励非零接触力（但不过大）
+        force_mag = torch.norm(self.left_cf, dim=1)  # (N,)
+        # 使用 softplus 或 clamp 避免爆炸
+        return torch.tanh(force_mag / 20.0)  # 20N 为典型阈值
     
-    def _reward_feet_swing_height(self):
-        contact = torch.norm(self.contact_forces[:, self.feet_indices, :3], dim=2) > 1.
-        pos_error = torch.square(self.feet_pos[:, :, 2] - 0.08) * ~contact
-        return torch.sum(pos_error, dim=(1))
-    
+    def _reward_contact_force_variation(self):
+        # 鼓励接触力变化
+        dF = torch.norm(self.left_cf - self.last_left_cf, dim=1)
+        reward = torch.tanh(dF / 10.0)  # 10 N/s 变化率
+        return reward
+
+    def _reward_no_excessive_force(self):
+        force_mag = torch.norm(self.left_cf, dim=1)
+        # 超过 40N 开始惩罚
+        excess = torch.clamp(force_mag - 40.0, min=0.0)
+        return -excess * 0.1
+
     def _reward_alive(self):
         # Reward for staying alive
         return 1.0
-    
-    def _reward_contact_no_vel(self):
-        # Penalize contact with no velocity
-        contact = torch.norm(self.contact_forces[:, self.feet_indices, :3], dim=2) > 1.
-        contact_feet_vel = self.feet_vel * contact.unsqueeze(-1)
-        penalize = torch.square(contact_feet_vel[:, :, :3])
-        return torch.sum(penalize, dim=(1,2))
-    
-    def _reward_hip_pos(self):
-        return torch.sum(torch.square(self.dof_pos[:,[0,2,6,8]]), dim=1)
     

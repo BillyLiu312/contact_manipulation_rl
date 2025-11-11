@@ -9,8 +9,8 @@ from legged_gym.envs.h1_2.h1_2_env import H1_2Robot
 from legged_gym.envs.h1_2_arm.h1_2_arm_config import H1_2ArmRoughCfg, H1_2ArmRoughCfgPPO
 from legged_gym.envs.h1_2_arm.h1_2_arm_env import H1_2ArmRobot
 
-from legged_gym.envs.h1_2_arm_rb.h1_2_arm_config import H1_2ArmRbRoughCfg, H1_2ArmRbRoughCfgPPO
-from legged_gym.envs.h1_2_arm_rb.h1_2_arm_env import H1_2ArmRbRobot
+from legged_gym.envs.h1_2_arm_rb.h1_2_arm_rb_config import H1_2ArmRbRoughCfg, H1_2ArmRbRoughCfgPPO
+from legged_gym.envs.h1_2_arm_rb.h1_2_arm_rb_env import H1_2ArmRbRobot
 
 from legged_gym.envs.g1.g1_config import G1RoughCfg, G1RoughCfgPPO
 from legged_gym.envs.g1.g1_env import G1Robot

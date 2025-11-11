@@ -109,15 +109,11 @@ class H1_2ArmRoughCfg(LeggedRobotCfg):
         base_height_target = 1.0
 
         class scales(LeggedRobotCfg.rewards.scales):
-            tracking_lin_vel = 1.0
-            tracking_ang_vel = 0.5
-            lin_vel_z = -2.0
-            ang_vel_xy = -0.05
-            orientation = -1.0
-            base_height = -10.0
+            contact_force_mag = 1.0
+            contact_force_variation = 0.5
+            no_excessive_force = -1.0
             dof_acc = -2.5e-7
             dof_vel = -1e-3
-            collision = 0.0
             action_rate = -0.01
             dof_pos_limits = -5.0
             alive = 0.15

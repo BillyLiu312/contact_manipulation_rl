@@ -96,7 +96,7 @@ class H1_2ArmRbRoughCfg(LeggedRobotCfg):
 
     class asset(LeggedRobotCfg.asset):
         file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/h1_2_arm/h1_2_7dof.urdf'
-        name = "h1_2_arm"
+        name = "h1_2_arm_rb"
         foot_name = "ankle_roll"
         penalize_contacts_on = []
         terminate_after_contacts_on = []
@@ -109,15 +109,11 @@ class H1_2ArmRbRoughCfg(LeggedRobotCfg):
         base_height_target = 1.0
 
         class scales(LeggedRobotCfg.rewards.scales):
-            tracking_lin_vel = 1.0
-            tracking_ang_vel = 0.5
-            lin_vel_z = -2.0
-            ang_vel_xy = -0.05
-            orientation = -1.0
-            base_height = -10.0
+            contact_force_mag = 1.0
+            contact_force_variation = 0.5
+            no_excessive_force = -1.0
             dof_acc = -2.5e-7
             dof_vel = -1e-3
-            collision = 0.0
             action_rate = -0.01
             dof_pos_limits = -5.0
             alive = 0.15
@@ -139,4 +135,4 @@ class H1_2ArmRbRoughCfgPPO(LeggedRobotCfgPPO):
         policy_class_name = "ActorCriticRecurrent"
         max_iterations = 10000
         run_name = ''
-        experiment_name = 'h1_2_arm'
+        experiment_name = 'h1_2_arm_rb'
