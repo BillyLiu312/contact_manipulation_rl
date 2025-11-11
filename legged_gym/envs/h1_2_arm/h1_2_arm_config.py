@@ -116,15 +116,10 @@ class H1_2ArmRoughCfg(LeggedRobotCfg):
             base_height = -10.0
             dof_acc = -2.5e-7
             dof_vel = -1e-3
-            feet_air_time = 0.0
             collision = 0.0
             action_rate = -0.01
             dof_pos_limits = -5.0
             alive = 0.15
-            hip_pos = -1.0
-            contact_no_vel = -0.2
-            feet_swing_height = -20.0
-            contact = 0.18
 
 
 class H1_2ArmRoughCfgPPO(LeggedRobotCfgPPO):

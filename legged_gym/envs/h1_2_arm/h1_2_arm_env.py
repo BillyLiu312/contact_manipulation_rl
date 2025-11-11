@@ -30,30 +30,11 @@ class H1_2ArmRobot(LeggedRobot):
         noise_vec[3+3*self.num_actions:3+3*self.num_actions+3] = noise_scales.contact * noise_level * self.obs_scales.contact # contact forces on left hand
 
         return noise_vec
-
-    def _init_foot(self):
-        self.feet_num = len(self.feet_indices)
-        
-        rigid_body_state = self.gym.acquire_rigid_body_state_tensor(self.sim)
-        self.rigid_body_states = gymtorch.wrap_tensor(rigid_body_state)
-        self.rigid_body_states_view = self.rigid_body_states.view(self.num_envs, -1, 13)
-        self.feet_state = self.rigid_body_states_view[:, self.feet_indices, :]
-        self.feet_pos = self.feet_state[:, :, :3]
-        self.feet_vel = self.feet_state[:, :, 7:10]
         
     def _init_buffers(self):
-        super()._init_buffers()
-        self._init_foot()
-        
+        super()._init_buffers()       
         self.left_driver_rb_index = self.gym.find_actor_rigid_body_handle(self.envs[0], self.actor_handles[0], "left_ee_op")
-
-        # Create global indices tensor for contact force access
-        # All envs have same topology, so offset by env_id * num_bodies
         self.num_bodies = self.gym.get_actor_rigid_body_count(self.envs[0], self.actor_handles[0])
-        self.left_driver_indices = torch.tensor(
-            [self.left_driver_rb_index + i * self.num_bodies for i in range(self.num_envs)],
-            device=self.device, dtype=torch.long
-        )
         # Buffers for twist constraint
         self.twist_left = torch.zeros(self.num_envs, 6, device=self.device)
         # self.twist_right = torch.zeros(self.num_envs, 6, device=self.device)
@@ -124,25 +105,6 @@ class H1_2ArmRobot(LeggedRobot):
                     gymapi.Quat(*quat_proj[[3, 0, 1, 2]])  # wxyz → Quat(w,x,y,z)
                 )
             )
-
-    def update_feet_state(self):
-        self.gym.refresh_rigid_body_state_tensor(self.sim)
-        
-        self.feet_state = self.rigid_body_states_view[:, self.feet_indices, :]
-        self.feet_pos = self.feet_state[:, :, :3]
-        self.feet_vel = self.feet_state[:, :, 7:10]
-        
-    def _post_physics_step_callback(self):
-        self.update_feet_state()
-
-        period = 0.8
-        offset = 0.5
-        self.phase = (self.episode_length_buf * self.dt) % period / period
-        self.phase_left = self.phase
-        self.phase_right = (self.phase + offset) % 1
-        self.leg_phase = torch.cat([self.phase_left.unsqueeze(1), self.phase_right.unsqueeze(1)], dim=-1)
-        
-        return super()._post_physics_step_callback()
     
     def step(self, actions):
         """ Apply actions, simulate with projection at every sub-step """
@@ -184,7 +146,7 @@ class H1_2ArmRobot(LeggedRobot):
         """ Computes observations
         """
         # Get contact forces on drivers
-        left_cf = self.contact_forces[self.left_driver_indices, :3]  # (N, 3)
+        left_cf = self.contact_forces[:, self.left_driver_rb_index, :3]  # (N, 3)
 
         self.obs_buf = torch.cat((  
                                     self.projected_gravity, # 3
