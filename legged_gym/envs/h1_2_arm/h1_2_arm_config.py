@@ -97,6 +97,7 @@ class H1_2ArmRoughCfg(LeggedRobotCfg):
     class asset(LeggedRobotCfg.asset):
         file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/h1_2_arm/h1_2_7dof.urdf'
         name = "h1_2_arm"
+        fix_base_link = True
         foot_name = "ankle_roll"
         penalize_contacts_on = []
         terminate_after_contacts_on = []

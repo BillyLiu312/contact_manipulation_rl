@@ -11,6 +11,13 @@
     <child link="pelvis"/>
   </joint> -->
 
+  <link name="world"></link>
+  <joint name="fixed_base" type="fixed">
+    <parent link="world"/>
+    <child link="pelvis"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
   <link name="pelvis">
     <inertial>
       <origin xyz="-0.0004 3.7E-05 -0.046864" rpy="0 0 0"/>
