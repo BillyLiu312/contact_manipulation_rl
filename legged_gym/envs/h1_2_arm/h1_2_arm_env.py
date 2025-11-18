@@ -6,6 +6,7 @@ from isaacgym import gymtorch, gymapi, gymutil
 import torch
 from .h1_2_arm_config import H1_2ArmRoughCfg
 from legged_gym.utils.se3_math import *
+import time
 
 class H1_2ArmRobot(LeggedRobot):
 
@@ -47,19 +48,19 @@ class H1_2ArmRobot(LeggedRobot):
         self.torque_tensor = torch.zeros(self.num_envs * self.num_bodies, 3, dtype=torch.float32, device=self.device)
 
     def random_unit_twist(self):
-        """Generate a random unit twist in se(3)"""
-        choice = torch.randint(0, 3, (1,)).item()
+        """Generate a random unit twist in se(3) on the correct device"""
+        choice = torch.randint(0, 3, (1,), device=self.device).item()
         if choice == 0:  # pure translation
-            v = torch.randn(3)
+            v = torch.randn(3, device=self.device)
             v /= v.norm() + 1e-8
-            w = torch.zeros(3)
+            w = torch.zeros(3, device=self.device)
         elif choice == 1:  # pure rotation
-            w = torch.randn(3)
+            w = torch.randn(3, device=self.device)
             w /= w.norm() + 1e-8
-            v = torch.zeros(3)
+            v = torch.zeros(3, device=self.device)
         else:  # spiral motion
-            v = torch.randn(3)
-            w = torch.randn(3)
+            v = torch.randn(3, device=self.device)
+            w = torch.randn(3, device=self.device)
             twist = torch.cat([v, w])
             twist /= twist.norm() + 1e-8
             v, w = twist[:3], twist[3:]
@@ -70,51 +71,79 @@ class H1_2ArmRobot(LeggedRobot):
 
         self.episode_time[env_ids] = 0.0
         # Sample random twists
-        for i in env_ids:
-            self.twist_left[i] = self.random_unit_twist()
-            # self.twist_right[i] = self.random_unit_twist()
+        num_reset = len(env_ids)
+        if num_reset > 0:
+            twists = torch.stack([self.random_unit_twist() for _ in range(num_reset)])
+            self.twist_left[env_ids] = twists
 
         # Record initial poses
         self.rb_states = gymtorch.wrap_tensor(self.gym.acquire_rigid_body_state_tensor(self.sim)).view(self.num_envs, self.num_bodies, 13)
-        for i in env_ids:
-            pos = self.rb_states[i, self.left_ee_handle, :3]
-            quat = self.rb_states[i, self.left_ee_handle, 3:7]
-            self.T0_left[i] = pose_to_se3(pos, quat)
+        pos_reset = self.rb_states[env_ids, self.left_ee_handle, :3]
+        quat_reset = self.rb_states[env_ids, self.left_ee_handle, 3:7]
+        self.T0_left[env_ids] = pose_to_se3_batch(pos_reset, quat_reset)  # (N_reset, 4, 4)
     
     def _apply_twist_forces(self):
         self.force_tensor.zero_()
         self.torque_tensor.zero_()
-
         speed_scale = 0.5
 
-        curr_pos_all = self.rb_states[:, self.left_ee_handle, :3]
-        curr_quat_all = self.rb_states[:, self.left_ee_handle, 3:7]
-        lin_vel_all = self.rb_states[:, self.left_ee_handle, 7:10]
-        ang_vel_all = self.rb_states[:, self.left_ee_handle, 10:13]
+        # (N,) episode time scaled
+        s = self.episode_time * speed_scale  # (num_envs,)
 
-        for i in range(self.num_envs):
-            s = self.episode_time[i] * speed_scale
-            T_offset = se3_exp_map(self.twist_left[i], s)
-            T_target = self.T0_left[i] @ T_offset
-            target_pos, target_quat = se3_to_pose(T_target)
+        # Current end-effector states
+        curr_pos = self.rb_states[:, self.left_ee_handle, :3]      # (N, 3)
+        curr_quat = self.rb_states[:, self.left_ee_handle, 3:7]    # (N, 4)
 
-            pos_err = target_pos - curr_pos_all[i]
-            quat_err = quat_mul(target_quat, quat_conjugate(curr_quat_all[i]))
-            ang_err = 2.0 * quat_err[:3]
+        # Target pose: T_target = T0 @ exp(s * twist)
+        T_offset = se3_exp_map_batch(self.twist_left, s)           # (N, 4, 4)
+        T_target = torch.bmm(self.T0_left, T_offset)               # (N, 4, 4)
 
-            force = 150.0 * pos_err - 15.0 * lin_vel_all[i]
-            torque = 50.0 * ang_err - 5.0 * ang_vel_all[i]
+        # Current pose as SE(3)
+        T_curr = pose_to_se3_batch(curr_pos, curr_quat)            # (N, 4, 4)
 
-            flat_idx = i * self.num_bodies + self.left_ee_handle
+        # Error transform: T_err = T_target^{-1} @ T_curr
+        T_target_inv = torch.inverse(T_target)                     # (N, 4, 4)
+        T_err = torch.bmm(T_target_inv, T_curr)                    # (N, 4, 4)
 
-            self.force_tensor[flat_idx, :] = force
-            self.torque_tensor[flat_idx, :] = torque
+        # Log map to get 6D error twist
+        err_twist = se3_log_map_batch(T_err)                       # (N, 6) = [v_err; w_err]
 
+        # Project error onto subspace orthogonal to allowed twist
+        xi = self.twist_left                                      # (N, 6), already unit
+        xi_norm = torch.norm(xi, dim=1, keepdim=True)             # (N, 1)
+        xi_unit = xi / (xi_norm + 1e-8)                           # (N, 6)
+
+        # Parallel component: (err · xi) * xi
+        dot_product = (err_twist * xi_unit).sum(dim=1, keepdim=True)  # (N, 1)
+        parallel_component = dot_product * xi_unit                # (N, 6)
+        perpendicular_err = err_twist - parallel_component        # (N, 6)
+
+        v_perp = perpendicular_err[:, :3]   # (N, 3)
+        w_perp = perpendicular_err[:, 3:]   # (N, 3)
+
+        # Spring forces (in end-effector local frame)
+        Kp_lin = 200.0
+        Kp_rot = 50.0
+        force_local = Kp_lin * v_perp      # (N, 3)
+        torque_local = Kp_rot * w_perp     # (N, 3)
+
+        # Transform to world frame
+        R_ee = quat_to_rot_matrix_batch(curr_quat)  # (N, 3, 3)
+        force_world = torch.bmm(R_ee, force_local.unsqueeze(-1)).squeeze(-1)    # (N, 3)
+        torque_world = torch.bmm(R_ee, torque_local.unsqueeze(-1)).squeeze(-1)  # (N, 3)
+
+        # Write into flat force/torque tensors
+        env_ids = torch.arange(self.num_envs, device=self.device)
+        flat_indices = env_ids * self.num_bodies + self.left_ee_handle  # (N,)
+        self.force_tensor[flat_indices, :] = force_world
+        self.torque_tensor[flat_indices, :] = torque_world
+
+        # Apply forces
         self.gym.apply_rigid_body_force_tensors(
             self.sim,
             gymtorch.unwrap_tensor(self.force_tensor),
             gymtorch.unwrap_tensor(self.torque_tensor),
-            gymapi.ENV_SPACE  # or WORLD_SPACE
+            gymapi.ENV_SPACE
         )
 
     def step(self, actions):

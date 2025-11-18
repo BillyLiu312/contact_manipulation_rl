@@ -44,7 +44,7 @@ class H1_2ArmRoughCfg(LeggedRobotCfg):
         num_observations = 27
         num_privileged_obs = 27
         num_actions = 7
-        num_envs = 64
+        num_envs = 4096
       
 
     class control(LeggedRobotCfg.control):
