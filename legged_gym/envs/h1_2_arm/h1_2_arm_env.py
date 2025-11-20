@@ -182,6 +182,57 @@ class H1_2ArmRobot(LeggedRobot):
             self.privileged_obs_buf = torch.clip(self.privileged_obs_buf, -clip_obs, clip_obs)
         return self.obs_buf, self.privileged_obs_buf, self.rew_buf, self.reset_buf, self.extras
 
+    def _draw_debug_vis(self):
+        """Draw twist direction as arrows at the left end-effector."""
+        if self.viewer is None:
+            return
+        # Clear previous debug lines
+        self.gym.clear_lines(self.viewer)
+
+        # Get current EE position (N, 3)
+        curr_pos = self.rb_states[:, self.left_ee_handle, :3]  # (N, 3)
+
+        # Extract twist components
+        v = self.twist_left[:, :3]  # (N, 3) linear part
+        w = self.twist_left[:, 3:]  # (N, 3) angular part
+
+        # Scale for visibility (adjust as needed)
+        scale_v = 0.3
+        scale_w = 0.3
+
+        # Convert to CPU numpy for drawing
+        pos_np = curr_pos.cpu().numpy()
+        v_np = (v * scale_v).cpu().numpy()
+        w_np = (w * scale_w).cpu().numpy()
+
+        # Colors: green for v, red for w
+        color_v = np.array([0.0, 1.0, 0.0])  # green
+        color_w = np.array([1.0, 0.0, 0.0])  # red
+
+        num_envs_to_draw = min(8, self.num_envs)  # Only draw first few envs to avoid clutter
+
+        for i in range(num_envs_to_draw):
+            start = pos_np[i]
+            end_v = start + v_np[i]
+            end_w = start + w_np[i]
+
+            # Draw v arrow
+            self.gym.add_lines(
+                self.viewer,
+                self.envs[i],
+                1,
+                start.tolist() + end_v.tolist(),
+                color_v.tolist()
+            )
+            # Draw w arrow
+            self.gym.add_lines(
+                self.viewer,
+                self.envs[i],
+                1,
+                start.tolist() + end_w.tolist(),
+                color_w.tolist()
+            )
+
     def post_physics_step(self):
         """ check terminations, compute observations and rewards
             calls self._post_physics_step_callback() for common computations 
@@ -189,6 +240,8 @@ class H1_2ArmRobot(LeggedRobot):
         """
         super().post_physics_step()
         self.last_left_cf[:] = self.left_cf[:]
+        if self.cfg.env.debug_vis and self.viewer:
+            self._draw_debug_vis()
 
     def compute_observations(self):
         """ Computes observations

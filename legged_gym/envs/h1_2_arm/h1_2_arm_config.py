@@ -45,6 +45,7 @@ class H1_2ArmRoughCfg(LeggedRobotCfg):
         num_privileged_obs = 27
         num_actions = 7
         num_envs = 4096
+        debug_vis = True  # visualize in simulator
       
 
     class control(LeggedRobotCfg.control):
