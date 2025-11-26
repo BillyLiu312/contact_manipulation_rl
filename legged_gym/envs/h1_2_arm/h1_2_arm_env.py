@@ -33,8 +33,9 @@ class H1_2ArmRobot(LeggedRobot):
         return noise_vec
         
     def _init_buffers(self):
-        super()._init_buffers()       
-        self.left_ee_handle = self.gym.find_actor_rigid_body_handle(self.envs[0], self.actor_handles[0], "left_ee_op")
+        super()._init_buffers()
+        self.end_effector_link = self.cfg.asset.end_effector_name
+        self.left_ee_handle = self.gym.find_actor_rigid_body_handle(self.envs[0], self.actor_handles[0], self.end_effector_link)
         self.num_bodies = self.gym.get_actor_rigid_body_count(self.envs[0], self.actor_handles[0])
         self.left_cf = self.contact_forces[:, self.left_ee_handle, :3]  # (N, 3)
         self.last_left_cf = torch.zeros_like(self.left_cf)

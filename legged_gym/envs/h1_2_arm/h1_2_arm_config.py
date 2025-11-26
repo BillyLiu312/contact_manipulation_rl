@@ -99,8 +99,8 @@ class H1_2ArmRoughCfg(LeggedRobotCfg):
         file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/h1_2_arm/h1_2_7dof.urdf'
         name = "h1_2_arm"
         fix_base_link = True
-        foot_name = "ankle_roll"
-        penalize_contacts_on = []
+        end_effector_name = "left_wrist_yaw_link"
+        penalize_contacts_on = ['shoulder', 'elbow', 'wrist']
         terminate_after_contacts_on = []
         self_collisions = 0  # 1 to disable, 0 to enable...bitwise filter
         flip_visual_attachments = False
@@ -119,6 +119,7 @@ class H1_2ArmRoughCfg(LeggedRobotCfg):
             action_rate = -0.01
             dof_pos_limits = -5.0
             alive = 0.15
+            collision = -1.
 
 
 class H1_2ArmRoughCfgPPO(LeggedRobotCfgPPO):
