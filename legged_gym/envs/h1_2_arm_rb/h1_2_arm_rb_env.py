@@ -6,6 +6,7 @@ from isaacgym import gymtorch, gymapi, gymutil
 import torch
 from .h1_2_arm_rb_config import H1_2ArmRbRoughCfg
 from legged_gym.utils.se3_math import *
+import time
 
 class H1_2ArmRbRobot(LeggedRobot):
 
@@ -39,24 +40,24 @@ class H1_2ArmRbRobot(LeggedRobot):
         self.twist_left = torch.zeros(self.num_envs, 6, device=self.device)
         self.T0_left = torch.zeros(self.num_envs, 4, 4, device=self.device)
         self.left_cf = self.contact_forces[:, self.left_ee_handle, :3]  # (N, 3)
-        self.last_left_cf = torch.zeros_like(self.left_cf)
+        self.last_left_cf = torch.zeros_like(self.left_cf, device=self.device)
 
         self.rb_states = gymtorch.wrap_tensor(self.gym.acquire_rigid_body_state_tensor(self.sim)).view(self.num_envs, self.num_bodies, 13)  # (env, body, state)
 
     def random_unit_twist(self):
-        """Generate a random unit twist in se(3)"""
-        choice = torch.randint(0, 3, (1,)).item()
+        """Generate a random unit twist in se(3) on the correct device"""
+        choice = torch.randint(0, 3, (1,), device=self.device).item()
         if choice == 0:  # pure translation
-            v = torch.randn(3)
+            v = torch.randn(3, device=self.device)
             v /= v.norm() + 1e-8
-            w = torch.zeros(3)
+            w = torch.zeros(3, device=self.device)
         elif choice == 1:  # pure rotation
-            w = torch.randn(3)
+            w = torch.randn(3, device=self.device)
             w /= w.norm() + 1e-8
-            v = torch.zeros(3)
+            v = torch.zeros(3, device=self.device)
         else:  # spiral motion
-            v = torch.randn(3)
-            w = torch.randn(3)
+            v = torch.randn(3, device=self.device)
+            w = torch.randn(3, device=self.device)
             twist = torch.cat([v, w])
             twist /= twist.norm() + 1e-8
             v, w = twist[:3], twist[3:]
@@ -65,46 +66,34 @@ class H1_2ArmRbRobot(LeggedRobot):
     def reset_idx(self, env_ids):
         super().reset_idx(env_ids)
 
-        # Sample random twists
-        for i in env_ids:
-            self.twist_left[i] = self.random_unit_twist()
-            # self.twist_right[i] = self.random_unit_twist()
 
-        # Record initial poses
-        self.rb_states = gymtorch.wrap_tensor(self.gym.acquire_rigid_body_state_tensor(self.sim)).view(self.num_envs, self.num_bodies, 13)
-        for i in env_ids:
-            # Left
-            pos_l = self.rb_states[i, self.left_ee_handle, :3]
-            quat_l = self.rb_states[i, self.left_ee_handle, 3:7]
-            self.T0_left[i] = pose_to_se3(pos_l, quat_l)
-            # Right
-            # pos_r = self.rb_states[self.right_driver_rb_handles[i], :3].clone()
-            # quat_r = self.rb_states[self.right_driver_rb_handles[i], 3:7].clone()
-            # self.T0_right[i] = pose_to_se3(pos_r, quat_r)
+        self.twist_left[env_ids] = torch.stack([self.random_unit_twist() for _ in env_ids])
+
+        pos_l = self.rb_states[env_ids, self.left_ee_handle, :3]
+        quat_l = self.rb_states[env_ids, self.left_ee_handle, 3:7]
+        self.T0_left[env_ids] = pose_to_se3_batch(pos_l, quat_l)
 
     def _project_hand_poses(self):
         """Project driver poses onto 1D SE(3) manifold defined by twist"""
-        for i in range(self.num_envs):
-            # --- Left hand ---
-            pos_curr = self.rb_states[i, self.left_ee_handle, :3]
-            quat_curr = self.rb_states[i, self.left_ee_handle, 3:7]
-            T_curr = pose_to_se3(pos_curr, quat_curr)
-            T_rel = torch.inverse(self.T0_left[i]) @ T_curr
-            delta_twist = se3_log_map(T_rel)
-            s = torch.dot(delta_twist, self.twist_left[i])
-            T_proj = self.T0_left[i] @ se3_exp_map(self.twist_left[i], s)
-            pos_proj, quat_proj = se3_to_pose(T_proj)
-            
-            self.gym.set_rigid_transform(
-                self.envs[i],
-                self.gym.find_actor_rigid_body_handle(
-                    self.envs[i], self.actor_handles[i], "left_ee_op"
-                ),
-                gymapi.Transform(
-                    gymapi.Vec3(*pos_proj),
-                    gymapi.Quat(*quat_proj[[3, 0, 1, 2]])  # wxyz → Quat(w,x,y,z)
-                )
+        pos_curr = self.rb_states[:, self.left_ee_handle, :3]
+        quat_curr = self.rb_states[:, self.left_ee_handle, 3:7]
+        T_curr = pose_to_se3_batch(pos_curr, quat_curr)
+        T_rel = torch.inverse(self.T0_left) @ T_curr
+        delta_twist = se3_log_map_batch(T_rel)
+        s = torch.sum(delta_twist * self.twist_left, dim=1)
+        T_proj = self.T0_left @ se3_exp_map_batch(self.twist_left, s)
+        pos_proj, quat_proj = se3_to_pose_batch(T_proj)
+        
+        self.gym.set_rigid_transform(
+            self.envs,
+            self.gym.find_actor_rigid_body_handle(
+                self.envs, self.actor_handles, "left_ee_op"
+            ),
+            gymapi.Transform(
+                gymapi.Vec3(*pos_proj),
+                gymapi.Quat(*quat_proj[[3, 0, 1, 2]])  # wxyz → Quat(w,x,y,z)
             )
+        )
     
     def step(self, actions):
         """ Apply actions, simulate with projection at every sub-step """
@@ -142,6 +131,57 @@ class H1_2ArmRbRobot(LeggedRobot):
             self.privileged_obs_buf = torch.clip(self.privileged_obs_buf, -clip_obs, clip_obs)
         return self.obs_buf, self.privileged_obs_buf, self.rew_buf, self.reset_buf, self.extras
 
+    def _draw_debug_vis(self):
+        """Draw twist direction as arrows at the left end-effector."""
+        if self.viewer is None:
+            return
+        # Clear previous debug lines
+        self.gym.clear_lines(self.viewer)
+
+        # Get current EE position (N, 3)
+        curr_pos = self.rb_states[:, self.left_ee_handle, :3]  # (N, 3)
+
+        # Extract twist components
+        v = self.twist_left[:, :3]  # (N, 3) linear part
+        w = self.twist_left[:, 3:]  # (N, 3) angular part
+
+        # Scale for visibility (adjust as needed)
+        scale_v = 0.3
+        scale_w = 0.3
+
+        # Convert to CPU numpy for drawing
+        pos_np = curr_pos.cpu().numpy()
+        v_np = (v * scale_v).cpu().numpy()
+        w_np = (w * scale_w).cpu().numpy()
+
+        # Colors: green for v, red for w
+        color_v = np.array([0.0, 1.0, 0.0])  # green
+        color_w = np.array([1.0, 0.0, 0.0])  # red
+
+        num_envs_to_draw = min(8, self.num_envs)  # Only draw first few envs to avoid clutter
+
+        for i in range(num_envs_to_draw):
+            start = pos_np[i]
+            end_v = start + v_np[i]
+            end_w = start + w_np[i]
+
+            # Draw v arrow
+            self.gym.add_lines(
+                self.viewer,
+                self.envs[i],
+                1,
+                start.tolist() + end_v.tolist(),
+                color_v.tolist()
+            )
+            # Draw w arrow
+            self.gym.add_lines(
+                self.viewer,
+                self.envs[i],
+                1,
+                start.tolist() + end_w.tolist(),
+                color_w.tolist()
+            )
+
     def post_physics_step(self):
         """ check terminations, compute observations and rewards
             calls self._post_physics_step_callback() for common computations 
@@ -149,6 +189,8 @@ class H1_2ArmRbRobot(LeggedRobot):
         """
         super().post_physics_step()
         self.last_left_cf[:] = self.left_cf[:]
+        if self.cfg.env.debug_vis and self.viewer:
+            self._draw_debug_vis()
     
     def compute_observations(self):
         """ Computes observations
