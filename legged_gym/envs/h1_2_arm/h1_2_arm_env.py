@@ -183,54 +183,51 @@ class H1_2ArmRobot(LeggedRobot):
         return self.obs_buf, self.privileged_obs_buf, self.rew_buf, self.reset_buf, self.extras
 
     def _draw_debug_vis(self):
-        """Draw twist direction as arrows at the left end-effector."""
+        """Draw twist direction as arrows at the left end-effector (GPU-optimized)."""
         if self.viewer is None:
             return
-        # Clear previous debug lines
         self.gym.clear_lines(self.viewer)
 
-        # Get current EE position (N, 3)
-        curr_pos = self.rb_states[:, self.left_ee_handle, :3]  # (N, 3)
+        # 只处理前 N 个环境（避免杂乱）
+        num_envs_to_draw = self.num_envs
+        if num_envs_to_draw == 0:
+            return
 
-        # Extract twist components
-        v = self.twist_left[:, :3]  # (N, 3) linear part
-        w = self.twist_left[:, 3:]  # (N, 3) angular part
+        # 所有计算在 GPU 上进行
+        curr_pos = self.rb_states[:num_envs_to_draw, self.left_ee_handle, :3]  # (N, 3)
+        v = self.twist_left[:num_envs_to_draw, :3]   # (N, 3)
+        w = self.twist_left[:num_envs_to_draw, 3:]   # (N, 3)
 
-        # Scale for visibility (adjust as needed)
         scale_v = 0.3
         scale_w = 0.3
 
-        # Convert to CPU numpy for drawing
+        # GPU 上计算箭头终点
+        end_v = curr_pos + v * scale_v  # (N, 3)
+        end_w = curr_pos + w * scale_w  # (N, 3)
+
+        # 一次性拷贝到 CPU（只拷贝需要绘制的部分）
         pos_np = curr_pos.cpu().numpy()
-        v_np = (v * scale_v).cpu().numpy()
-        w_np = (w * scale_w).cpu().numpy()
+        end_v_np = end_v.cpu().numpy()
+        end_w_np = end_w.cpu().numpy()
 
-        # Colors: green for v, red for w
-        color_v = np.array([0.0, 1.0, 0.0])  # green
-        color_w = np.array([1.0, 0.0, 0.0])  # red
-
-        num_envs_to_draw = min(8, self.num_envs)  # Only draw first few envs to avoid clutter
+        color_v = [0.0, 1.0, 0.0]  # green
+        color_w = [1.0, 0.0, 0.0]  # red
 
         for i in range(num_envs_to_draw):
             start = pos_np[i]
-            end_v = start + v_np[i]
-            end_w = start + w_np[i]
-
-            # Draw v arrow
             self.gym.add_lines(
                 self.viewer,
                 self.envs[i],
                 1,
-                start.tolist() + end_v.tolist(),
-                color_v.tolist()
+                start.tolist() + end_v_np[i].tolist(),
+                color_v
             )
-            # Draw w arrow
             self.gym.add_lines(
                 self.viewer,
                 self.envs[i],
                 1,
-                start.tolist() + end_w.tolist(),
-                color_w.tolist()
+                start.tolist() + end_w_np[i].tolist(),
+                color_w
             )
 
     def post_physics_step(self):
