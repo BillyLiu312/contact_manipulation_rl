@@ -100,7 +100,7 @@ class H1_2ArmRoughCfg(LeggedRobotCfg):
         name = "h1_2_arm"
         fix_base_link = True
         end_effector_name = "left_wrist_yaw_link"
-        penalize_contacts_on = ['shoulder', 'elbow', 'wrist']
+        penalize_contacts_on = ['shoulder', 'elbow', 'wrist', 'torso']
         terminate_after_contacts_on = []
         self_collisions = 0  # 1 to disable, 0 to enable...bitwise filter
         flip_visual_attachments = False
