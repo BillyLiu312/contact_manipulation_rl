@@ -94,24 +94,16 @@ class H1_2ArmRobot(LeggedRobot):
     def _apply_twist_forces(self):
         self.force_tensor.zero_()
         self.torque_tensor.zero_()
-        speed_scale = 0.5
-
-        # (N,) episode time scaled
-        s = self.episode_time * speed_scale  # (num_envs,)
 
         # Current end-effector states
         curr_pos = self.rb_states[:, self.left_ee_handle, :3]      # (N, 3)
         curr_quat = self.rb_states[:, self.left_ee_handle, 3:7]    # (N, 4)
 
-        # Target pose: T_target = T0 @ exp(s * twist)
-        T_offset = se3_exp_map_batch(self.twist_left, s)           # (N, 4, 4)
-        T_target = torch.bmm(self.T0_left, T_offset)               # (N, 4, 4)
-
         # Current pose as SE(3)
         T_curr = pose_to_se3_batch(curr_pos, curr_quat)            # (N, 4, 4)
 
         # Error transform: T_err = T_target^{-1} @ T_curr
-        T_target_inv = torch.inverse(T_target)                     # (N, 4, 4)
+        T_target_inv = torch.inverse(self.T0_left)                     # (N, 4, 4)
         T_err = torch.bmm(T_target_inv, T_curr)                    # (N, 4, 4)
 
         # Log map to get 6D error twist
@@ -133,8 +125,8 @@ class H1_2ArmRobot(LeggedRobot):
         # Spring forces (in end-effector local frame)
         Kp_lin = 200.0
         Kp_rot = 50.0
-        force_local = Kp_lin * v_perp      # (N, 3)
-        torque_local = Kp_rot * w_perp     # (N, 3)
+        force_local = - Kp_lin * v_perp      # (N, 3)
+        torque_local = - Kp_rot * w_perp     # (N, 3)
 
         # Transform to world frame
         R_ee = quat_to_rot_matrix_batch(curr_quat)  # (N, 3, 3)
