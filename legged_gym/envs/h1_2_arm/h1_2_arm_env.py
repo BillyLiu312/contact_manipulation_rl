@@ -4,9 +4,17 @@ from legged_gym.envs.base.legged_robot import LeggedRobot
 from isaacgym.torch_utils import *
 from isaacgym import gymtorch, gymapi, gymutil
 import torch
-from .h1_2_arm_config import H1_2ArmRoughCfg
+from .h1_2_arm_config import H1_2ArmRoughCfg, H1_2ArmRoughCfgPPO
 from legged_gym.utils.se3_math import *
 import time
+import imageio
+import os
+from legged_gym import LEGGED_GYM_ROOT_DIR
+
+experiment_name = H1_2ArmRoughCfgPPO.runner.experiment_name
+log_path = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', experiment_name)
+runs = os.listdir(log_path)
+video_writer = imageio.get_writer(os.path.join(LEGGED_GYM_ROOT_DIR, 'videos', f'{experiment_name}_{runs[-1]}.mp4'), fps=10)
 
 class H1_2ArmRobot(LeggedRobot):
 
@@ -240,6 +248,11 @@ class H1_2ArmRobot(LeggedRobot):
         self.last_left_cf[:] = self.left_cf[:]
         if self.cfg.env.debug_vis and self.viewer:
             self._draw_debug_vis()
+            img_path = f"temp_frame.png"
+            self.gym.write_viewer_image_to_file(self.viewer, img_path)
+            frame = imageio.imread(img_path)
+            video_writer.append_data(frame)
+            os.remove(img_path)
 
     def compute_observations(self):
         """ Computes observations
