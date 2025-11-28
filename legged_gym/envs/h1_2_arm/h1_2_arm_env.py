@@ -11,11 +11,6 @@ import imageio
 import os
 from legged_gym import LEGGED_GYM_ROOT_DIR
 
-experiment_name = H1_2ArmRoughCfgPPO.runner.experiment_name
-log_path = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', experiment_name)
-runs = os.listdir(log_path)
-video_writer = imageio.get_writer(os.path.join(LEGGED_GYM_ROOT_DIR, 'videos', f'{experiment_name}_{runs[-1]}.mp4'), fps=10)
-
 class H1_2ArmRobot(LeggedRobot):
 
     def _get_noise_scale_vec(self, cfg):
@@ -55,6 +50,11 @@ class H1_2ArmRobot(LeggedRobot):
         self.episode_time = torch.zeros(self.num_envs, device=self.device)
         self.force_tensor = torch.zeros(self.num_envs * self.num_bodies, 3, dtype=torch.float32, device=self.device)
         self.torque_tensor = torch.zeros(self.num_envs * self.num_bodies, 3, dtype=torch.float32, device=self.device)
+
+        self.experiment_name = H1_2ArmRoughCfgPPO.runner.experiment_name
+        log_path = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', self.experiment_name)
+        runs = os.listdir(log_path)
+        self.video_writer = imageio.get_writer(os.path.join(LEGGED_GYM_ROOT_DIR, 'videos', f'{self.experiment_name}_{runs[-1]}.mp4'), fps=10)
 
     def random_unit_twist(self):
         """Generate a random unit twist in se(3) on the correct device"""
@@ -243,7 +243,7 @@ class H1_2ArmRobot(LeggedRobot):
             img_path = f"temp_frame.png"
             self.gym.write_viewer_image_to_file(self.viewer, img_path)
             frame = imageio.imread(img_path)
-            video_writer.append_data(frame)
+            self.video_writer.append_data(frame)
             os.remove(img_path)
 
     def compute_observations(self):

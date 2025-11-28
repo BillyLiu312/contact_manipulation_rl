@@ -1,7 +1,7 @@
 import torch
 from torch import Tensor
 import numpy as np
-from pytorch3d.transforms import matrix_to_quaternion
+# from pytorch3d.transforms import matrix_to_quaternion
 
 def skew(v):
     zero = torch.zeros_like(v[..., 0])
@@ -170,12 +170,12 @@ def pose_to_se3_batch(pos, quat):
     T[..., :3, 3] = pos
     return T
 
-def se3_to_pose_batch(T):
-    R = T[..., :3, :3]
-    trans = T[..., :3, 3]
-    quat_wxyz = matrix_to_quaternion(R)  # returns [w, x, y, z]
-    quat_xyzw = quat_wxyz[..., [1, 2, 3, 0]]  # reorder to [x, y, z, w]
-    return trans, quat_xyzw
+# def se3_to_pose_batch(T):
+#     R = T[..., :3, :3]
+#     trans = T[..., :3, 3]
+#     quat_wxyz = matrix_to_quaternion(R)  # returns [w, x, y, z]
+#     quat_xyzw = quat_wxyz[..., [1, 2, 3, 0]]  # reorder to [x, y, z, w]
+#     return trans, quat_xyzw
 
 def se3_exp_map_batch(twist, s):
     """Batched exponential map: exp(s * twist^) -> SE(3)
