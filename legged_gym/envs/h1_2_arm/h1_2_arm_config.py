@@ -115,7 +115,8 @@ class H1_2ArmRoughCfg(LeggedRobotCfg):
             contact_force_mag = 0.0
             contact_force_variation = 0.0
             task_movement = 1.0
-            task_compliance = -0.1
+            task_compliance = 0.0
+            constraint_deviation = 1.0
             no_excessive_force = -1.0
             dof_acc = -2.5e-7
             dof_vel = -1e-3

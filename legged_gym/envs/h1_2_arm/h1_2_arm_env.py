@@ -139,6 +139,8 @@ class H1_2ArmRobot(LeggedRobot):
         self.force_tensor[flat_indices, :] = force_world
         self.torque_tensor[flat_indices, :] = torque_world
 
+        self.last_perp_error = torch.norm(perpendicular_err, dim=1)
+
         # Apply forces
         self.gym.apply_rigid_body_force_tensors(
             self.sim,
@@ -322,4 +324,12 @@ class H1_2ArmRobot(LeggedRobot):
         """
         force_mag = torch.norm(self.left_cf, dim=1)
         # Use tanh to cap the penalty
-        return torch.tanh(force_mag / 20.0) 
+        return torch.tanh(force_mag / 20.0)
+
+    def _reward_constraint_deviation(self):
+        """
+        Penalize the geometric error (how far we are from the allowed twist).
+        This is cleaner than penalizing contact forces.
+        """
+        # Returns 1.0 when error is 0, drops to 0.0 as error increases.
+        return torch.exp(-self.last_perp_error / 0.1)
