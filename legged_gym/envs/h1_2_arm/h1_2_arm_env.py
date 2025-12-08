@@ -292,5 +292,34 @@ class H1_2ArmRobot(LeggedRobot):
         # Reward for staying alive
         return 1.0
     
-    
-    
+    def _reward_task_movement(self):
+        """
+        Reward velocity projected onto the allowed twist direction.
+        Encourages the robot to explore the 'free' DOF.
+        """
+        # Get end-effector linear and angular velocity
+        # self.rb_states: (N, num_bodies, 13) -> 13: [x,y,z, qx,qy,qz,qw, vx,vy,vz, wx,wy,wz]
+        lin_vel = self.rb_states[:, self.left_ee_handle, 7:10]
+        ang_vel = self.rb_states[:, self.left_ee_handle, 10:13]
+        
+        # Current twist in world frame (N, 6)
+        current_twist = torch.cat([lin_vel, ang_vel], dim=1)
+        
+        # Target unit twist (N, 6)
+        xi = self.twist_left
+        
+        # Project current velocity onto allowed axis
+        # Dot product: (N, 6) * (N, 6) -> sum -> (N,)
+        parallel_vel = (current_twist * xi).sum(dim=1)
+        
+        # Reward absolute speed along the axis (move back or forth)
+        return torch.abs(parallel_vel)
+
+    def _reward_task_compliance(self):
+        """
+        Penalize generating forces against the constraint.
+        If the robot moves perfectly, force is 0.
+        """
+        force_mag = torch.norm(self.left_cf, dim=1)
+        # Use tanh to cap the penalty
+        return torch.tanh(force_mag / 20.0) 
