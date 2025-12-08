@@ -51,11 +51,12 @@ class H1_2ArmRobot(LeggedRobot):
         self.force_tensor = torch.zeros(self.num_envs * self.num_bodies, 3, dtype=torch.float32, device=self.device)
         self.torque_tensor = torch.zeros(self.num_envs * self.num_bodies, 3, dtype=torch.float32, device=self.device)
 
-        self.experiment_name = H1_2ArmRoughCfgPPO.runner.experiment_name
-        log_path = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', self.experiment_name)
-        runs = os.listdir(log_path)
-        self.video_writer = imageio.get_writer(os.path.join(LEGGED_GYM_ROOT_DIR, 'videos', f'{self.experiment_name}_{runs[-1]}.mp4'), fps=10)
-
+        if self.viewer:
+            self.experiment_name = H1_2ArmRoughCfgPPO.runner.experiment_name
+            log_path = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', self.experiment_name)
+            runs = os.listdir(log_path)
+            self.video_writer = imageio.get_writer(os.path.join(LEGGED_GYM_ROOT_DIR, 'videos', f'{self.experiment_name}_{runs[-1]}.mp4'), fps=10)
+            
     def random_unit_twist(self):
         """Generate a random unit twist in se(3) on the correct device"""
         choice = torch.randint(0, 3, (1,), device=self.device).item()
