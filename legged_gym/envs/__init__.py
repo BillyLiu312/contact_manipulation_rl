@@ -12,6 +12,9 @@ from legged_gym.envs.h1_2_arm.h1_2_arm_env import H1_2ArmRobot
 from legged_gym.envs.h1_2_arm_rb.h1_2_arm_rb_config import H1_2ArmRbRoughCfg, H1_2ArmRbRoughCfgPPO
 from legged_gym.envs.h1_2_arm_rb.h1_2_arm_rb_env import H1_2ArmRbRobot
 
+from legged_gym.envs.arx_x5.arx_x5_config import ArxX5RoughCfg, ArxX5RoughCfgPPO
+from legged_gym.envs.arx_x5.arx_x5_env import ArxX5Robot
+
 from legged_gym.envs.g1.g1_config import G1RoughCfg, G1RoughCfgPPO
 from legged_gym.envs.g1.g1_env import G1Robot
 from .base.legged_robot import LeggedRobot
@@ -25,3 +28,4 @@ task_registry.register( "g1", G1Robot, G1RoughCfg(), G1RoughCfgPPO())
 
 task_registry.register( "h1_2_arm", H1_2ArmRobot, H1_2ArmRoughCfg(), H1_2ArmRoughCfgPPO())
 task_registry.register( "h1_2_arm_rb", H1_2ArmRbRobot, H1_2ArmRbRoughCfg(), H1_2ArmRbRoughCfgPPO())
+task_registry.register( "arx_x5", ArxX5Robot, ArxX5RoughCfg(), ArxX5RoughCfgPPO())
