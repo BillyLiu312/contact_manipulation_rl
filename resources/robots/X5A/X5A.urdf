@@ -434,7 +434,7 @@
   </link>
   <joint
     name="joint7"
-    type="prismatic">
+    type="fixed">
     <origin
       xyz="0.08657 0.024896 -0.0002436"
       rpy="0 0 0" />
@@ -492,7 +492,7 @@
   </link>
   <joint
     name="joint8"
-    type="prismatic">
+    type="fixed">
     <origin
       xyz="0.08657 -0.0249 -0.00024366"
       rpy="0 0 0" />

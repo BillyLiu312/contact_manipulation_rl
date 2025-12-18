@@ -6,44 +6,19 @@ class ArxX5RoughCfg(LeggedRobotCfg):
     class init_state(LeggedRobotCfg.init_state):
         pos = [0.0, 0.0, 1.05]  # x,y,z [m]
         default_joint_angles = { # = target angles [rad] when action = 0.0
-            'left_hip_yaw_joint': 0,
-            'left_hip_roll_joint': 0,
-            'left_hip_pitch_joint': -0.16,
-            'left_knee_joint': 0.36,
-            'left_ankle_pitch_joint': -0.2,
-            'left_ankle_roll_joint': 0.0,
-
-            'right_hip_yaw_joint': 0,
-            'right_hip_roll_joint': 0,
-            'right_hip_pitch_joint': -0.16,
-            'right_knee_joint': 0.36,
-            'right_ankle_pitch_joint': -0.2,
-            'right_ankle_roll_joint': 0.0,
-
-            'torso_joint': 0,
-
-            'left_shoulder_pitch_joint': 0.4,
-            'left_shoulder_roll_joint': 0,
-            'left_shoulder_yaw_joint': 0,
-            'left_elbow_pitch_joint': 0.3,
-            'left_elbow_roll_joint': 0.0,
-            'left_wrist_pitch_joint': 0.0,
-            'left_wrist_yaw_joint': 0.0,
-
-            'right_shoulder_pitch_joint': 0.4,
-            'right_shoulder_roll_joint': 0,
-            'right_shoulder_yaw_joint': 0,
-            'right_elbow_pitch_joint': 0.3,
-            'right_elbow_roll_joint': 0.0,
-            'right_wrist_pitch_joint': 0.0,
-            'right_wrist_yaw_joint': 0.0,
+            'joint1': 0,
+            'joint2': 0.8,
+            'joint3': -1.6,
+            'joint4': 0,
+            'joint5': 0.8,
+            'joint6': -1.6,
         }
 
     class env(LeggedRobotCfg.env):
-        # 3 + 7 + 7 + 7 + 3 = 27
-        num_observations = 27
-        num_privileged_obs = 27
-        num_actions = 7
+        # 3 + 6 + 6 + 6 + 3 = 24
+        num_observations = 24
+        num_privileged_obs = 24
+        num_actions = 6
         num_envs = 4096
         debug_vis = True  # visualize in simulator
       
@@ -53,22 +28,10 @@ class ArxX5RoughCfg(LeggedRobotCfg):
         control_type = 'P'
         # PD Drive parameters:
         stiffness = {
-            'shoulder_pitch_joint': 120.,
-            'shoulder_roll_joint': 120.,
-            'shoulder_yaw_joint': 120.,
-            'elbow_pitch_joint': 80.,
-            'elbow_roll_joint': 80.,
-            'wrist_pitch_joint': 80.,
-            'wrist_yaw_joint': 80.,
+            'joint': 20.,
         }  # [N*m/rad]
         damping = {
-            'shoulder_pitch_joint': 2.0,
-            'shoulder_roll_joint': 2.0,
-            'shoulder_yaw_joint': 2.0,  
-            'elbow_pitch_joint': 1.0,
-            'elbow_roll_joint': 1.0,
-            'wrist_pitch_joint': 1.0,
-            'wrist_yaw_joint': 1.0,
+            'joint': 0.5,
         }  # [N*m/rad]  # [N*m*s/rad]
         # action scale: target angle = actionScale * action + defaultAngle
         action_scale = 0.25
@@ -97,11 +60,11 @@ class ArxX5RoughCfg(LeggedRobotCfg):
         damping_multiplier_range = [0.8, 1.2]
 
     class asset(LeggedRobotCfg.asset):
-        file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/h1_2_arm/h1_2_7dof.urdf'
-        name = "h1_2_arm"
+        file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/X5A/X5A.urdf'
+        name = "X5A"
         fix_base_link = True
-        end_effector_name = "left_wrist_yaw_link"
-        penalize_contacts_on = ['shoulder', 'elbow', 'wrist', 'torso']
+        end_effector_name = "link8"
+        penalize_contacts_on = ['link1', 'link2', 'link3', 'link4', 'link5', 'link6']
         terminate_after_contacts_on = []
         self_collisions = 0  # 1 to disable, 0 to enable...bitwise filter
         flip_visual_attachments = False
@@ -142,4 +105,4 @@ class ArxX5RoughCfgPPO(LeggedRobotCfgPPO):
         policy_class_name = "ActorCriticRecurrent"
         max_iterations = 10000
         run_name = ''
-        experiment_name = 'h1_2_arm'
+        experiment_name = 'arx_x5'
