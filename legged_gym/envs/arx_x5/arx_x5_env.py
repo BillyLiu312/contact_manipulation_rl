@@ -52,7 +52,7 @@ class ArxX5Robot(LeggedRobot):
         self.torque_tensor = torch.zeros(self.num_envs * self.num_bodies, 3, dtype=torch.float32, device=self.device)
 
         if self.viewer:
-            self.experiment_name = H1_2ArmRoughCfgPPO.runner.experiment_name
+            self.experiment_name = ArxX5RoughCfgPPO.runner.experiment_name
             log_path = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', self.experiment_name)
             runs = os.listdir(log_path)
             self.video_writer = imageio.get_writer(os.path.join(LEGGED_GYM_ROOT_DIR, 'videos', f'{self.experiment_name}_{runs[-1]}.mp4'), fps=10)
