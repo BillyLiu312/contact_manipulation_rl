@@ -55,11 +55,9 @@ class H1_2ArmRobot(LeggedRobot):
         body_props = self.gym.get_actor_rigid_body_properties(self.envs[0], self.actor_handles[0])
         self.ee_mass = body_props[self.left_ee_handle].mass
         # 获取局部惯量对角线 (Isaac Gym 简化处理)
-        self.ee_inertia_local = torch.tensor([
-            body_props[self.left_ee_handle].inertia.x,
-            body_props[self.left_ee_handle].inertia.y,
-            body_props[self.left_ee_handle].inertia.z
-        ], device=self.device)
+        inertia_vec3 = body_props[self.left_ee_handle].inertia
+        inertia_list = [inertia_vec3.x, inertia_vec3.y, inertia_vec3.z]
+        self.ee_inertia_local = torch.tensor(inertia_list, dtype=torch.float32, device=self.device)
 
         # 用于计算加速度的缓存
         self.last_ee_vel = torch.zeros((self.num_envs, 6), device=self.device)
