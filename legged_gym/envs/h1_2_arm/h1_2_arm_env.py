@@ -53,11 +53,16 @@ class H1_2ArmRobot(LeggedRobot):
 
         # 获取末端关节的物理属性
         body_props = self.gym.get_actor_rigid_body_properties(self.envs[0], self.actor_handles[0])
-        self.ee_mass = body_props[self.left_ee_handle].mass
-        # 获取局部惯量对角线 (Isaac Gym 简化处理)
-        inertia_vec3 = body_props[self.left_ee_handle].inertia
-        inertia_list = [inertia_vec3.x, inertia_vec3.y, inertia_vec3.z]
-        self.ee_inertia_local = torch.tensor(inertia_list, dtype=torch.float32, device=self.device)
+        ee_props = body_props[self.left_ee_handle]
+        
+        self.ee_mass = ee_props.mass
+        
+        # 我们取对角线元素: Ixx (x.x), Iyy (y.y), Izz (z.z)
+        ixx = ee_props.inertia.x.x
+        iyy = ee_props.inertia.y.y
+        izz = ee_props.inertia.z.z
+
+        self.ee_inertia_local = torch.tensor([ixx, iyy, izz], device=self.device, dtype=torch.float32)
 
         # 用于计算加速度的缓存
         self.last_ee_vel = torch.zeros((self.num_envs, 6), device=self.device)
@@ -159,6 +164,10 @@ class H1_2ArmRobot(LeggedRobot):
         
         self.force_tensor[flat_indices, :] = force_perp + correction_force
         self.torque_tensor[flat_indices, :] = torque_perp + correction_torque
+
+        # 7. 奖励计算
+        self.last_perp_error = torch.norm(err_perp, dim=1)
+
 
         self.gym.apply_rigid_body_force_tensors(
             self.sim,
