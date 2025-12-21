@@ -51,6 +51,23 @@ class ArxX5Robot(LeggedRobot):
         self.force_tensor = torch.zeros(self.num_envs * self.num_bodies, 3, dtype=torch.float32, device=self.device)
         self.torque_tensor = torch.zeros(self.num_envs * self.num_bodies, 3, dtype=torch.float32, device=self.device)
 
+        # 获取末端关节的物理属性
+        body_props = self.gym.get_actor_rigid_body_properties(self.envs[0], self.actor_handles[0])
+        ee_props = body_props[self.left_ee_handle]
+        
+        self.ee_mass = ee_props.mass
+        
+        # 我们取对角线元素: Ixx (x.x), Iyy (y.y), Izz (z.z)
+        ixx = ee_props.inertia.x.x
+        iyy = ee_props.inertia.y.y
+        izz = ee_props.inertia.z.z
+
+        self.ee_inertia_local = torch.tensor([ixx, iyy, izz], device=self.device, dtype=torch.float32)
+
+        # 用于计算加速度的缓存
+        self.last_ee_vel = torch.zeros((self.num_envs, 6), device=self.device)
+        self.ee_accel = torch.zeros((self.num_envs, 6), device=self.device)
+
         if self.viewer:
             self.experiment_name = ArxX5RoughCfgPPO.runner.experiment_name
             log_path = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', self.experiment_name)
@@ -96,53 +113,62 @@ class ArxX5Robot(LeggedRobot):
         self.force_tensor.zero_()
         self.torque_tensor.zero_()
 
-        # Current end-effector states
-        curr_pos = self.rb_states[:, self.left_ee_handle, :3]      # (N, 3)
-        curr_quat = self.rb_states[:, self.left_ee_handle, 3:7]    # (N, 4)
+        # 1. 获取当前速度 (lin_vel: 7:10, ang_vel: 10:13)
+        curr_lin_vel = self.rb_states[:, self.left_ee_handle, 7:10]
+        curr_ang_vel = self.rb_states[:, self.left_ee_handle, 10:13]
+        curr_vel = torch.cat([curr_lin_vel, curr_ang_vel], dim=1)
 
-        # Current pose as SE(3)
-        T_curr = pose_to_se3_batch(curr_pos, curr_quat)            # (N, 4, 4)
+        # 2. 数值微分计算加速度 (dt 是 sim.dt)
+        dt = self.cfg.sim.dt
+        self.ee_accel = (curr_vel - self.last_ee_vel) / dt
+        self.last_ee_vel[:] = curr_vel[:]
 
-        # Error transform: T_err = T_target^{-1} @ T_curr
-        T_target_inv = torch.inverse(self.T0_left)                     # (N, 4, 4)
-        T_err = torch.bmm(T_target_inv, T_curr)                    # (N, 4, 4)
+        # 3. 投影加速度到垂直于允许 twist 的空间
+        xi = self.twist_left # (N, 6) 已经是单位向量
+        # 计算在 twist 方向上的加速度标量投影
+        acc_parallel_mag = (self.ee_accel * xi).sum(dim=1, keepdim=True)
+        acc_parallel = acc_parallel_mag * xi
+        acc_perp = self.ee_accel - acc_parallel # 垂直于约束方向的加速度
 
-        # Log map to get 6D error twist
-        err_twist = se3_log_map_batch(T_err)                       # (N, 6) = [v_err; w_err]
+        # 4. 计算反作用力 F = m*a, Tau = I*alpha
+        # 处理线动力学
+        force_perp = - self.ee_mass * acc_perp[:, :3]
+        
+        # 处理角动力学 (简化：假设惯量在世界坐标系下变化不大，或进行旋转变换)
+        curr_quat = self.rb_states[:, self.left_ee_handle, 3:7]
+        R_ee = quat_to_rot_matrix_batch(curr_quat)
+        # 将局部惯量转换到世界坐标系: I_world = R * I_local * R^T
+        # 简化处理：直接对角线缩放
+        torque_perp = - torch.bmm(R_ee, (self.ee_inertia_local * acc_perp[:, 3:]).unsqueeze(-1)).squeeze(-1)
 
-        # Project error onto subspace orthogonal to allowed twist
-        xi = self.twist_left                                      # (N, 6), already unit
-        xi_norm = torch.norm(xi, dim=1, keepdim=True)             # (N, 1)
-        xi_unit = xi / (xi_norm + 1e-8)                           # (N, 6)
+        # 5. 辅助修正项 (Position/Velocity Drift Correction)
+        # 纯加速度控制会产生漂移，加入微弱的阻尼和弹簧
+        curr_pos = self.rb_states[:, self.left_ee_handle, :3]
+        T_curr = pose_to_se3_batch(curr_pos, curr_quat)
+        T_target_inv = torch.inverse(self.T0_left)
+        T_err = torch.bmm(T_target_inv, T_curr)
+        err_twist = se3_log_map_batch(T_err)
+        
+        # 同样只对垂直分量进行修正
+        err_perp = err_twist - (err_twist * xi).sum(dim=1, keepdim=True) * xi
+        vel_perp = curr_vel - (curr_vel * xi).sum(dim=1, keepdim=True) * xi
+        
+        Kp = 5.0  # 较小的增益，仅用于消除漂移
+        Kd = 1.0
+        correction_force = - Kp * err_perp[:, :3] - Kd * vel_perp[:, :3]
+        correction_torque = - Kp * err_perp[:, 3:] - Kd * vel_perp[:, 3:]
 
-        # Parallel component: (err · xi) * xi
-        dot_product = (err_twist * xi_unit).sum(dim=1, keepdim=True)  # (N, 1)
-        parallel_component = dot_product * xi_unit                # (N, 6)
-        perpendicular_err = err_twist - parallel_component        # (N, 6)
-
-        v_perp = perpendicular_err[:, :3]   # (N, 3)
-        w_perp = perpendicular_err[:, 3:]   # (N, 3)
-
-        # Spring forces (in end-effector local frame)
-        Kp_lin = 200.0
-        Kp_rot = 50.0
-        force_local = - Kp_lin * v_perp      # (N, 3)
-        torque_local = - Kp_rot * w_perp     # (N, 3)
-
-        # Transform to world frame
-        R_ee = quat_to_rot_matrix_batch(curr_quat)  # (N, 3, 3)
-        force_world = torch.bmm(R_ee, force_local.unsqueeze(-1)).squeeze(-1)    # (N, 3)
-        torque_world = torch.bmm(R_ee, torque_local.unsqueeze(-1)).squeeze(-1)  # (N, 3)
-
-        # Write into flat force/torque tensors
+        # 6. 合并力并应用
         env_ids = torch.arange(self.num_envs, device=self.device)
-        flat_indices = env_ids * self.num_bodies + self.left_ee_handle  # (N,)
-        self.force_tensor[flat_indices, :] = force_world
-        self.torque_tensor[flat_indices, :] = torque_world
+        flat_indices = env_ids * self.num_bodies + self.left_ee_handle
+        
+        self.force_tensor[flat_indices, :] = force_perp + correction_force
+        self.torque_tensor[flat_indices, :] = torque_perp + correction_torque
 
-        self.last_perp_error = torch.norm(perpendicular_err, dim=1)
+        # 7. 奖励计算
+        self.last_perp_error = torch.norm(err_perp, dim=1)
 
-        # Apply forces
+
         self.gym.apply_rigid_body_force_tensors(
             self.sim,
             gymtorch.unwrap_tensor(self.force_tensor),
@@ -162,6 +188,7 @@ class ArxX5Robot(LeggedRobot):
             self.torques = self._compute_torques(self.actions).view(self.torques.shape)
             self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(self.torques))
 
+            self.gym.refresh_rigid_body_state_tensor(self.sim)
             self._apply_twist_forces()
             self.gym.simulate(self.sim)
             if self.cfg.env.test:
@@ -174,7 +201,6 @@ class ArxX5Robot(LeggedRobot):
                 self.gym.fetch_results(self.sim, True)
                        
             self.gym.refresh_dof_state_tensor(self.sim)
-            self.gym.refresh_rigid_body_state_tensor(self.sim)
 
         # After all sub-steps: run standard post-processing
         self.post_physics_step()
