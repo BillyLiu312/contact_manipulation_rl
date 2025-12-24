@@ -50,7 +50,7 @@ class H1_2ArmRobot(LeggedRobot):
         self.episode_time = torch.zeros(self.num_envs, device=self.device)
         self.force_tensor = torch.zeros(self.num_envs, 3, dtype=torch.float32, device=self.device)
         self.torque_tensor = torch.zeros(self.num_envs, 3, dtype=torch.float32, device=self.device)
-        self.contact_forces = torch.zeros(self.num_envs, 6, device=self.device)
+        self.end_contact_forces = torch.zeros(self.num_envs, 6, device=self.device)
 
         self.jacobian_tensor = gymtorch.wrap_tensor(self.gym.acquire_jacobian_tensor(self.sim, self.cfg.asset.name))
 
@@ -164,7 +164,7 @@ class H1_2ArmRobot(LeggedRobot):
         
         self.force_tensor[env_ids, :] = force_perp + correction_force
         self.torque_tensor[env_ids, :] = torque_perp + correction_torque
-        self.contact_forces = torch.cat([self.force_tensor, self.torque_tensor], dim=1)
+        self.end_contact_forces = torch.cat([self.force_tensor, self.torque_tensor], dim=1)
 
         # 7. 奖励计算
         self.last_perp_error = torch.norm(err_perp, dim=1)
