@@ -52,8 +52,7 @@ class H1_2ArmRobot(LeggedRobot):
         self.torque_tensor = torch.zeros(self.num_envs, 3, dtype=torch.float32, device=self.device)
         self.contact_forces = torch.zeros(self.num_envs, 6, device=self.device)
 
-        jacobian_tensor = self.gym.acquire_jacobian_tensor(self.sim, self.cfg.asset.name)
-        self.jacobian = gymtorch.wrap_tensor(jacobian_tensor)
+        self.jacobian_tensor = gymtorch.wrap_tensor(self.gym.acquire_jacobian_tensor(self.sim, self.cfg.asset.name))
 
         # 获取末端关节的物理属性
         body_props = self.gym.get_actor_rigid_body_properties(self.envs[0], self.actor_handles[0])
@@ -123,9 +122,7 @@ class H1_2ArmRobot(LeggedRobot):
         curr_vel = torch.cat([curr_lin_vel, curr_ang_vel], dim=1)
 
         # 2. 数值微分计算加速度 (dt 是 sim.dt)
-        self.dof_acc = (self.last_dof_vel - self.dof_vel) / self.dt
-        self.last_dof_vel[:] = self.dof_vel[:]
-        self.ee_accel = torch.matmul(self.jacobian, self.dof_acc.unsqueeze(-1)).squeeze(-1)
+        self.ee_accel = self._compute_ee_acceleration_jacobian()
 
         # 3. 投影加速度到垂直于允许 twist 的空间
         xi = self.twist_left # (N, 6) 已经是单位向量
@@ -171,6 +168,38 @@ class H1_2ArmRobot(LeggedRobot):
 
         # 7. 奖励计算
         self.last_perp_error = torch.norm(err_perp, dim=1)
+
+    def _compute_ee_acceleration_jacobian(self):
+        # 1. Refresh the Jacobian
+        self.gym.refresh_jacobian_tensors(self.sim)
+        
+        # 2. Get current Jacobian for the EE (assuming index 7 for the arm tip)
+        # Shape: (num_envs, 6, num_arm_dofs)
+        curr_J = self.jacobian_tensor[:, self.left_ee_handle - 1, :, :] 
+
+        # 3. Compute Joint Acceleration (q_dot_dot)
+        # Using numerical diff on joint velocities is MUCH cleaner than on EE velocity
+        dt = self.dt
+        curr_dof_vel = self.dof_vel # (num_envs, num_dofs)
+        q_dot_dot = (curr_dof_vel - self.last_dof_vel) / dt
+        self.last_dof_vel[:] = curr_dof_vel[:]
+
+        # 4. Compute J_dot * q_dot
+        # Approximate J_dot = (J_curr - J_prev) / dt
+        if hasattr(self, 'last_J'):
+            J_dot = (curr_J - self.last_J) / dt
+            convective_accel = torch.bmm(J_dot, curr_dof_vel.unsqueeze(-1)).squeeze(-1)
+        else:
+            convective_accel = torch.zeros(self.num_envs, 6, device=self.device)
+        
+        self.last_J = curr_J.clone()
+
+        # 5. Compute J * q_dot_dot
+        joint_accel_mapped = torch.bmm(curr_J, q_dot_dot.unsqueeze(-1)).squeeze(-1)
+
+        # 6. Total Acceleration
+        ee_accel = joint_accel_mapped + convective_accel
+        return ee_accel
 
     def step(self, actions):
         """ Apply actions, simulate with projection at every sub-step """
