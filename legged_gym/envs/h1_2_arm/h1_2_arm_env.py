@@ -52,7 +52,7 @@ class H1_2ArmRobot(LeggedRobot):
         self.torque_tensor = torch.zeros(self.num_envs, 3, dtype=torch.float32, device=self.device)
         self.contact_forces = torch.zeros(self.num_envs, 6, device=self.device)
 
-        jacobian_tensor = self.gym.acquire_jacobian_tensor(self.sim, self.end_effector_link)
+        jacobian_tensor = self.gym.acquire_jacobian_tensor(self.sim, self.cfg.asset.name)
         self.jacobian = gymtorch.wrap_tensor(jacobian_tensor)
 
         # 获取末端关节的物理属性
@@ -171,14 +171,6 @@ class H1_2ArmRobot(LeggedRobot):
 
         # 7. 奖励计算
         self.last_perp_error = torch.norm(err_perp, dim=1)
-
-
-        self.gym.apply_rigid_body_force_tensors(
-            self.sim,
-            gymtorch.unwrap_tensor(self.force_tensor),
-            gymtorch.unwrap_tensor(self.torque_tensor),
-            gymapi.ENV_SPACE
-        )
 
     def step(self, actions):
         """ Apply actions, simulate with projection at every sub-step """
