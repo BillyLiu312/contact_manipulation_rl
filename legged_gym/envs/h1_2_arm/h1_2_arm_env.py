@@ -342,7 +342,7 @@ class H1_2ArmRobot(LeggedRobot):
         parallel_vel = (current_twist * xi).sum(dim=1)
         
         # Reward absolute speed along the axis (move back or forth)
-        return torch.abs(parallel_vel)
+        return torch.tanh(parallel_vel ** 2)
 
     def _reward_task_compliance(self):
         """
