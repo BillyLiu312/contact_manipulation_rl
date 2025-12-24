@@ -341,8 +341,8 @@ class H1_2ArmRobot(LeggedRobot):
         # Dot product: (N, 6) * (N, 6) -> sum -> (N,)
         parallel_vel = (current_twist * xi).sum(dim=1)
         
-        # Reward absolute speed along the axis (move back or forth)
-        return torch.tanh(parallel_vel ** 2)
+        # Reward speed along the axis (move back or forth)
+        return torch.tanh(torch.clamp(parallel_vel, min=-90.0, max=90.0) * torch.pi / 180.0)  # Scale factor to convert to radians/sec
 
     def _reward_task_compliance(self):
         """
