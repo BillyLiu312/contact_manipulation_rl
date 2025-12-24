@@ -48,8 +48,12 @@ class H1_2ArmRobot(LeggedRobot):
         self.rb_states = gymtorch.wrap_tensor(self.gym.acquire_rigid_body_state_tensor(self.sim)).view(self.num_envs, self.num_bodies, 13)  # (env, body, state)
 
         self.episode_time = torch.zeros(self.num_envs, device=self.device)
-        self.force_tensor = torch.zeros(self.num_envs * self.num_bodies, 3, dtype=torch.float32, device=self.device)
-        self.torque_tensor = torch.zeros(self.num_envs * self.num_bodies, 3, dtype=torch.float32, device=self.device)
+        self.force_tensor = torch.zeros(self.num_envs, 3, dtype=torch.float32, device=self.device)
+        self.torque_tensor = torch.zeros(self.num_envs, 3, dtype=torch.float32, device=self.device)
+        self.contact_forces = torch.zeros(self.num_envs, 6, device=self.device)
+
+        jacobian_tensor = self.gym.acquire_jacobian_tensor(self.sim, self.end_effector_link)
+        self.jacobian = gymtorch.wrap_tensor(jacobian_tensor)
 
         # 获取末端关节的物理属性
         body_props = self.gym.get_actor_rigid_body_properties(self.envs[0], self.actor_handles[0])
@@ -119,9 +123,9 @@ class H1_2ArmRobot(LeggedRobot):
         curr_vel = torch.cat([curr_lin_vel, curr_ang_vel], dim=1)
 
         # 2. 数值微分计算加速度 (dt 是 sim.dt)
-        dt = self.cfg.sim.dt
-        self.ee_accel = (curr_vel - self.last_ee_vel) / dt
-        self.last_ee_vel[:] = curr_vel[:]
+        self.dof_acc = (self.last_dof_vel - self.dof_vel) / self.dt
+        self.last_dof_vel[:] = self.dof_vel[:]
+        self.ee_accel = torch.matmul(self.jacobian, self.dof_acc.unsqueeze(-1)).squeeze(-1)
 
         # 3. 投影加速度到垂直于允许 twist 的空间
         xi = self.twist_left # (N, 6) 已经是单位向量
@@ -160,10 +164,10 @@ class H1_2ArmRobot(LeggedRobot):
 
         # 6. 合并力并应用
         env_ids = torch.arange(self.num_envs, device=self.device)
-        flat_indices = env_ids * self.num_bodies + self.left_ee_handle
         
-        self.force_tensor[flat_indices, :] = force_perp + correction_force
-        self.torque_tensor[flat_indices, :] = torque_perp + correction_torque
+        self.force_tensor[env_ids, :] = force_perp + correction_force
+        self.torque_tensor[env_ids, :] = torque_perp + correction_torque
+        self.contact_forces = torch.cat([self.force_tensor, self.torque_tensor], dim=1)
 
         # 7. 奖励计算
         self.last_perp_error = torch.norm(err_perp, dim=1)
@@ -283,14 +287,14 @@ class H1_2ArmRobot(LeggedRobot):
                                     (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos, # 7
                                     self.dof_vel * self.obs_scales.dof_vel, # 7
                                     self.actions, # 7
-                                    self.left_cf # 3
+                                    self.contact_forces # 6
                                     ),dim=-1)
         self.privileged_obs_buf = torch.cat((
                                     self.projected_gravity,
                                     (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
                                     self.dof_vel * self.obs_scales.dof_vel,
                                     self.actions,
-                                    self.left_cf
+                                    self.contact_forces # 6
                                     ),dim=-1)
         # add perceptive inputs if not blind
         # add noise if needed

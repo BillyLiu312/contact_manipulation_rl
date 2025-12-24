@@ -6,22 +6,6 @@ class H1_2ArmRoughCfg(LeggedRobotCfg):
     class init_state(LeggedRobotCfg.init_state):
         pos = [0.0, 0.0, 1.05]  # x,y,z [m]
         default_joint_angles = { # = target angles [rad] when action = 0.0
-            'left_hip_yaw_joint': 0,
-            'left_hip_roll_joint': 0,
-            'left_hip_pitch_joint': -0.16,
-            'left_knee_joint': 0.36,
-            'left_ankle_pitch_joint': -0.2,
-            'left_ankle_roll_joint': 0.0,
-
-            'right_hip_yaw_joint': 0,
-            'right_hip_roll_joint': 0,
-            'right_hip_pitch_joint': -0.16,
-            'right_knee_joint': 0.36,
-            'right_ankle_pitch_joint': -0.2,
-            'right_ankle_roll_joint': 0.0,
-
-            'torso_joint': 0,
-
             'left_shoulder_pitch_joint': 0.4,
             'left_shoulder_roll_joint': 0,
             'left_shoulder_yaw_joint': 0,
@@ -29,20 +13,12 @@ class H1_2ArmRoughCfg(LeggedRobotCfg):
             'left_elbow_roll_joint': 0.0,
             'left_wrist_pitch_joint': 0.0,
             'left_wrist_yaw_joint': 0.0,
-
-            'right_shoulder_pitch_joint': 0.4,
-            'right_shoulder_roll_joint': 0,
-            'right_shoulder_yaw_joint': 0,
-            'right_elbow_pitch_joint': 0.3,
-            'right_elbow_roll_joint': 0.0,
-            'right_wrist_pitch_joint': 0.0,
-            'right_wrist_yaw_joint': 0.0,
         }
 
     class env(LeggedRobotCfg.env):
-        # 3 + 7 + 7 + 7 + 3 = 27
-        num_observations = 27
-        num_privileged_obs = 27
+        # 3 + 7 + 7 + 7 + 6 = 30
+        num_observations = 30
+        num_privileged_obs = 30
         num_actions = 7
         num_envs = 4096
         debug_vis = True  # visualize in simulator
