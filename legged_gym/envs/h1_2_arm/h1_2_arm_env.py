@@ -162,8 +162,8 @@ class H1_2ArmRobot(LeggedRobot):
         # 6. 合并力并应用
         env_ids = torch.arange(self.num_envs, device=self.device)
         
-        self.force_tensor[env_ids, :] = force_perp + correction_force
-        self.torque_tensor[env_ids, :] = torque_perp + correction_torque
+        self.force_tensor[env_ids, :] = force_perp # + correction_force
+        self.torque_tensor[env_ids, :] = torque_perp # + correction_torque
         self.end_contact_forces = torch.cat([self.force_tensor, self.torque_tensor], dim=1)
 
         # 7. 奖励计算
