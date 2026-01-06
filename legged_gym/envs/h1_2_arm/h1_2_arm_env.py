@@ -214,7 +214,7 @@ class H1_2ArmRobot(LeggedRobot):
             self.gym.set_dof_actuation_force_tensor(self.sim, gymtorch.unwrap_tensor(self.torques))
 
             self.gym.refresh_rigid_body_state_tensor(self.sim)
-            self._apply_twist_forces()
+            # self._apply_twist_forces()
             self.gym.simulate(self.sim)
             if self.cfg.env.test:
                 elapsed_time = self.gym.get_elapsed_time(self.sim)
@@ -308,14 +308,14 @@ class H1_2ArmRobot(LeggedRobot):
                                     (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos, # 7
                                     self.dof_vel * self.obs_scales.dof_vel, # 7
                                     self.actions, # 7
-                                    self.end_contact_forces # 6
+                                    self.twist_left # 6
                                     ),dim=-1)
         self.privileged_obs_buf = torch.cat((
                                     self.projected_gravity,
                                     (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
                                     self.dof_vel * self.obs_scales.dof_vel,
                                     self.actions,
-                                    self.end_contact_forces # 6
+                                    self.twist_left # 6
                                     ),dim=-1)
         # add perceptive inputs if not blind
         # add noise if needed
