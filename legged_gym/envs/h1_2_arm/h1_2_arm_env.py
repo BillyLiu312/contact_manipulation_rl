@@ -308,14 +308,14 @@ class H1_2ArmRobot(LeggedRobot):
                                     (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos, # 7
                                     self.dof_vel * self.obs_scales.dof_vel, # 7
                                     self.actions, # 7
-                                    self.twist_left # c6
+                                    self.end_contact_forces # c6
                                     ),dim=-1)
         self.privileged_obs_buf = torch.cat((
                                     self.projected_gravity,
                                     (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
                                     self.dof_vel * self.obs_scales.dof_vel,
                                     self.actions,
-                                    self.twist_left # 6
+                                    self.end_contact_forces # 6
                                     ),dim=-1)
         # add perceptive inputs if not blind
         # add noise if needed
