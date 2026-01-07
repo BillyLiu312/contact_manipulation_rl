@@ -10,6 +10,7 @@ from legged_gym.utils import  get_args, export_policy_as_jit, task_registry, Log
 
 import numpy as np
 import torch
+import pickle
 
 
 def play(args):
@@ -39,9 +40,20 @@ def play(args):
         export_policy_as_jit(ppo_runner.alg.actor_critic, path)
         print('Exported policy as jit script to: ', path)
 
-    for i in range(10*int(env.max_episode_length)):
-        actions = policy(obs.detach())
-        obs, _, rews, dones, infos = env.step(actions.detach())
+    try:
+        for i in range(10*int(env.max_episode_length)):
+            actions = policy(obs.detach())
+            obs, _, rews, dones, infos = env.step(actions.detach())
+    except KeyboardInterrupt:
+        twist_data = env.twist_records
+        with open('twist_records.pkl', 'wb') as f:
+            pickle.dump(twist_data, f)
+        env.plot_twist_curves(save_path='twist_comparison.png')
+        sys.exit(0)
+    except Exception as e:
+        print("An error occurred during execution:", str(e))
+        sys.exit(1)
+
 
 if __name__ == '__main__':
     EXPORT_POLICY = True

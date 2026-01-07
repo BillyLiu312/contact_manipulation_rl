@@ -76,7 +76,40 @@ class H1_2ArmRobot(LeggedRobot):
             log_path = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', self.experiment_name)
             runs = os.listdir(log_path)
             self.video_writer = imageio.get_writer(os.path.join(LEGGED_GYM_ROOT_DIR, 'videos', f'{self.experiment_name}_{runs[-1]}.mp4'), fps=10)
-            
+        
+        # --------------------- 新增：Twist数据记录缓冲区 ---------------------
+        self.record_twist_data = True  # 是否记录twist数据
+        self.twist_records = {
+            'time': [],
+            'target_twist': [],  # 目标twist (6维)
+            'actual_twist': [],  # 实际twist (6维)
+            'env_id': 0  # 记录第0个环境的数据
+        }
+        # -------------------------------------------------------------------
+
+    def _record_twist_data(self):
+        """记录末端执行器的目标twist和实际twist数据"""
+        if not self.record_twist_data:
+            return
+        
+        env_id = self.twist_records['env_id']
+        
+        # 获取实际twist (线速度+角速度)
+        curr_lin_vel = self.rb_states[env_id, self.left_ee_handle, 7:10].cpu().numpy()
+        curr_ang_vel = self.rb_states[env_id, self.left_ee_handle, 10:13].cpu().numpy()
+        actual_twist = np.concatenate([curr_lin_vel, curr_ang_vel])
+        
+        # 获取目标twist
+        target_twist = self.twist_left[env_id].cpu().numpy()
+        
+        # 获取当前时间
+        current_time = self.episode_time[env_id].cpu().numpy()
+        
+        # 记录数据
+        self.twist_records['time'].append(current_time)
+        self.twist_records['target_twist'].append(target_twist)
+        self.twist_records['actual_twist'].append(actual_twist)
+
     def random_unit_twist(self):
         """Generate a random unit twist in se(3) on the correct device"""
         choice = torch.randint(0, 3, (1,), device=self.device).item()
@@ -230,6 +263,8 @@ class H1_2ArmRobot(LeggedRobot):
         # After all sub-steps: run standard post-processing
         self.post_physics_step()
 
+        self._record_twist_data()
+
         # Clip and return
         clip_obs = self.cfg.normalization.clip_observations
         self.obs_buf = torch.clip(self.obs_buf, -clip_obs, clip_obs)
@@ -284,6 +319,59 @@ class H1_2ArmRobot(LeggedRobot):
                 start.tolist() + end_w_np[i].tolist(),
                 color_w
             )
+
+    def plot_twist_curves(self, save_path=None):
+        """
+        绘制末端执行器真实twist和目标twist的对比曲线
+        Args:
+            save_path: 图片保存路径，如果为None则显示图片
+        """
+        import matplotlib.pyplot as plt
+        import numpy as np
+        
+        # 转换数据为numpy数组
+        time_array = np.array(self.twist_records['time'])
+        target_twist_array = np.array(self.twist_records['target_twist'])
+        actual_twist_array = np.array(self.twist_records['actual_twist'])
+        
+        # 创建图形
+        fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+        fig.suptitle('End-effector Twist: Target vs Actual', fontsize=16)
+        
+        # 定义维度名称
+        dim_names = ['Linear X', 'Linear Y', 'Linear Z', 
+                    'Angular X', 'Angular Y', 'Angular Z']
+        
+        # 绘制每个维度的曲线
+        for i in range(6):
+            row = i // 3
+            col = i % 3
+            
+            axes[row, col].plot(time_array, target_twist_array[:, i], 
+                            'r-', label='Target', linewidth=2, alpha=0.8)
+            axes[row, col].plot(time_array, actual_twist_array[:, i], 
+                            'b--', label='Actual', linewidth=2, alpha=0.8)
+            
+            axes[row, col].set_title(dim_names[i])
+            axes[row, col].set_xlabel('Time (s)')
+            axes[row, col].set_ylabel('Twist Value')
+            axes[row, col].legend()
+            axes[row, col].grid(True, alpha=0.3)
+        
+        # 调整布局
+        plt.tight_layout()
+        
+        # 保存或显示图片
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"Twist曲线已保存至: {save_path}")
+        else:
+            plt.show()
+        
+        # 清空记录（可选）
+        self.twist_records['time'] = []
+        self.twist_records['target_twist'] = []
+        self.twist_records['actual_twist'] = []
 
     def post_physics_step(self):
         """ check terminations, compute observations and rewards

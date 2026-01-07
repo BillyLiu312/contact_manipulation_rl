@@ -163,3 +163,8 @@ logs/
 
 # videos
 videos/
+
+# twist records
+twist_records.pkl
+# twist plots
+twist_comparison.png
